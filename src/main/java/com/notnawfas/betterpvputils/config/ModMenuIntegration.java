@@ -77,6 +77,7 @@ public class ModMenuIntegration implements ModMenuApi {
                                 .build())
                         .build())
                 .save(() -> ModConfig.getConfig().save())
+                .build()
                 .generateScreen(parent);
     }
 }

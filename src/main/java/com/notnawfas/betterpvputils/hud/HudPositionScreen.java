@@ -1,11 +1,13 @@
 package com.notnawfas.betterpvputils.hud;
 
 import com.notnawfas.betterpvputils.config.ModConfig;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.Screen;
+import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.text.Text;
-import net.minecraft.client.gui.Click;
+import org.lwjgl.glfw.GLFW;
 
 public class HudPositionScreen extends Screen {
 
@@ -52,17 +54,17 @@ public class HudPositionScreen extends Screen {
         super.render(drawContext, mouseX, mouseY, delta);
     }
 
-    private void drawOutline(DrawContext drawContext, int x, int y, int width, int height, int color) {
-        drawContext.fill(x, y, x + width, y + 1, color);
-        drawContext.fill(x, y + height - 1, x + width, y + height, color);
-        drawContext.fill(x, y, x + 1, y + height, color);
-        drawContext.fill(x + width - 1, y, x + width, y + height, color);
+    private void drawOutline(DrawContext drawContext, int x, int y, int w, int h, int color) {
+        drawContext.fill(x, y, x + w, y + 1, color);
+        drawContext.fill(x, y + h - 1, x + w, y + h, color);
+        drawContext.fill(x, y, x + 1, y + h, color);
+        drawContext.fill(x + w - 1, y, x + w, y + h, color);
     }
 
     @Override
-    public boolean mouseClicked(Click click) {
-        if (click.type() != Click.Type.MOUSE_LEFT) {
-            return super.mouseClicked(click);
+    public boolean mouseClicked(Click click, boolean always) {
+        if (click.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+            return super.mouseClicked(click, always);
         }
 
         double mouseX = click.x();
@@ -85,7 +87,7 @@ public class HudPositionScreen extends Screen {
             dragOffsetY = mouseY - hudY;
             return true;
         }
-        return super.mouseClicked(click);
+        return super.mouseClicked(click, always);
     }
 
     @Override
