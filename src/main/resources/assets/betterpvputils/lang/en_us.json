@@ -1,0 +1,18 @@
+{
+  "betterpvputils.name": "Better PvP Utils",
+  "betterpvputils.config.title": "Better PvP Utils Config",
+  "betterpvputils.config.category.cps": "CPS Counter",
+  "betterpvputils.config.category.position": "Position",
+  "betterpvputils.config.option.enabled": "Enabled",
+  "betterpvputils.config.option.enabled.description": "Toggle the CPS HUD on/off",
+  "betterpvputils.config.option.displayFormat": "Display Format",
+  "betterpvputils.config.option.displayFormat.description": "Use %cps_mouse.left%, %cps_mouse.right%, %cps_keyboard.<key>% as variables",
+  "betterpvputils.config.option.useMinecraftFont": "Use Minecraft Font",
+  "betterpvputils.config.option.showBackground": "Show Background",
+  "betterpvputils.config.option.backgroundColor": "Background Color",
+  "betterpvputils.config.option.textColor": "Text Color",
+  "betterpvputils.config.option.posX": "X Position",
+  "betterpvputils.config.option.posY": "Y Position",
+  "betterpvputils.config.option.dragToReposition": "Drag to Reposition",
+  "betterpvputils.screen.reposition.title": "Drag the HUD to reposition. Press ESC to confirm."
+}
