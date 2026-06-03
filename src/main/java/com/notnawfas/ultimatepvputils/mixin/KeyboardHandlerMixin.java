@@ -13,6 +13,6 @@ public class KeyboardHandlerMixin {
 
     @Inject(method = "onKey", at = @At("HEAD"))
     private void onKey(long window, int key, KeyInput keyInput, CallbackInfo ci) {
-        CpsTracker.INSTANCE.onKeyPress(keyInput.key());
+        CpsTracker.INSTANCE.onKeyPress(keyInput.key(), key);
     }
 }

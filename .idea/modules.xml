@@ -2,8 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/BetterPvPUtils-McMod.main.iml" filepath="$PROJECT_DIR$/.idea/modules/BetterPvPUtils-McMod.main.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/BetterPvPUtils-McMod.test.iml" filepath="$PROJECT_DIR$/.idea/modules/BetterPvPUtils-McMod.test.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/BetterPvPUtils-McMod.iml" filepath="$PROJECT_DIR$/.idea/BetterPvPUtils-McMod.iml" />
     </modules>
   </component>
 </project>

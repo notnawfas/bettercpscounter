@@ -13,6 +13,10 @@ public class UltimatePvPUtils implements ModInitializer {
     @Override
     public void onInitialize() {
         ModConfig.init();
-        LOGGER.info("Ultimate PvP Utils initialized");
+        LOGGER.info("=========================================");
+        LOGGER.info("ULTIMATE PVP UTILS - v1.0 - by notnawfas");
+        LOGGER.info("[INFO] Initializing...");
+        LOGGER.info("[INFO] Initialized!");
+        LOGGER.info("=========================================");
     }
 }

@@ -36,6 +36,10 @@ public class UltimatePvPUtilsClient implements ClientModInitializer {
             }
         });
 
-        UltimatePvPUtils.LOGGER.info("Ultimate PvP Utils client initialized");
+        UltimatePvPUtils.LOGGER.info("=========================================");
+        UltimatePvPUtils.LOGGER.info("ULTIMATE PVP UTILS - v1.0 - by notnawfas");
+        UltimatePvPUtils.LOGGER.info("[INFO] Initializing...");
+        UltimatePvPUtils.LOGGER.info("[INFO] Initialized!");
+        UltimatePvPUtils.LOGGER.info("=========================================");
     }
 }
