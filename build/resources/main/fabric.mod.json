@@ -1,13 +1,21 @@
 {
   "schemaVersion": 1,
   "id": "ultimatepvputils",
-  "version": "1.0",
+  "version": "0.0.5",
   "name": "Ultimate PvP Utils",
   "description": "PvP utility mod with customizable CPS counter and more.",
   "authors": [
-    "notnawfas"
+    {
+      "name": "notnawfas",
+      "contact": {"homepage": "https://notnawfas.qzz.io"}
+    }
   ],
-  "contact": {},
+  "contact": {
+    "homepage": "https://modrinth.com/plugin/ultimatepvputils",
+    "sources": "https://github.com/notnawfas/ultimatepvputils",
+    "issues": "https://github.com/notnawfas/ultimatepvputils/issues",
+    "author": "https://notnawfas.qzz.io"
+  },
   "license": "All Rights Reserved",
   "icon": "assets/ultimatepvputils/icon.png",
   "environment": "client",
@@ -29,7 +37,7 @@
     "fabricloader": ">=0.19.3",
     "minecraft": "~1.21.11",
     "java": ">=21",
-    "fabric-api": "*"
+    "fabric-api": ">=0.141.3+1.21.11"
   },
   "recommends": {
     "modmenu": ">=17.0.0"

@@ -13,8 +13,6 @@ public class MouseHandlerMixin {
 
     @Inject(method = "onMouseButton", at = @At("HEAD"))
     private void onMouseButton(long window, MouseInput mouseInput, int action, CallbackInfo ci) {
-        if (action == 1) {
-            CpsTracker.INSTANCE.onMouseClick(mouseInput.button());
-        }
+        CpsTracker.INSTANCE.onMouseClick(mouseInput.button(), action);
     }
 }

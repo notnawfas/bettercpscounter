@@ -10,6 +10,17 @@ import org.lwjgl.glfw.GLFW;
 
 public class HudPositionScreen extends Screen {
 
+    private enum Handle {
+        NONE,
+        TOP_LEFT, TOP, TOP_RIGHT,
+        RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT,
+        LEFT
+    }
+
+    private static final int DOT_RADIUS = 5;
+    private static final int DOT_HIT_RADIUS = 8;
+    private static final int DEADZONE = 5;
+
     private final Screen parent;
     private final CounterEntry counter;
 
@@ -17,17 +28,41 @@ public class HudPositionScreen extends Screen {
     private double dragOffsetX = 0;
     private double dragOffsetY = 0;
 
-    private boolean resizing = false;
-    private double resizeAnchorX = 0;
-    private double resizeAnchorY = 0;
-    private double resizeStartScale = 1.0;
-
-    private static final int EDGE_ZONE = 8;
+    private Handle activeHandle = Handle.NONE;
+    private double dragStartX = 0;
+    private double dragStartY = 0;
+    private double dragStartScreenX = 0;
+    private double dragStartScreenY = 0;
+    private double dragStartHudW = 0;
+    private double dragStartHudH = 0;
+    private double dragStartScale = 1.0;
 
     public HudPositionScreen(Screen parent, CounterEntry counter) {
         super(Text.literal("Position"));
         this.parent = parent;
         this.counter = counter;
+    }
+
+    @Override
+    public void onDisplayed() {
+        CpsHudOverlay.setSnappingActive(true);
+    }
+
+    @Override
+    public void removed() {
+        CpsHudOverlay.setSnappingActive(false);
+        ModConfig.getConfig().save();
+    }
+
+    private CpsHudOverlay.ResolvedCounter rc() {
+        return CpsHudOverlay.resolve(counter);
+    }
+
+    private int[] getHudBounds() {
+        CpsHudOverlay.ResolvedCounter rc = rc();
+        int hudX = Math.max(0, Math.min((int) (counter.posX * (width - rc.w())), width - rc.w()));
+        int hudY = Math.max(0, Math.min((int) (counter.posY * (height - rc.h())), height - rc.h()));
+        return new int[]{hudX, hudY, rc.w(), rc.h()};
     }
 
     @Override
@@ -37,42 +72,81 @@ public class HudPositionScreen extends Screen {
         }
 
         if (counter == null) {
+            drawContext.fill(0, 0, width, height, DrawUtils.OVERLAY_MED);
             drawContext.drawCenteredTextWithShadow(textRenderer, "ESC to confirm", width / 2, height / 2, 0xFFFFFF);
             return;
         }
 
-        int hudWidth = CpsHudOverlay.getHudWidth(counter);
-        int hudHeight = CpsHudOverlay.getHudHeight(counter);
+        drawContext.fill(0, 0, width, height, DrawUtils.OVERLAY_LIGHT);
 
-        int hudX = (int) (counter.posX * (width - hudWidth));
-        int hudY = (int) (counter.posY * (height - hudHeight));
-        hudX = Math.max(0, Math.min(hudX, width - hudWidth));
-        hudY = Math.max(0, Math.min(hudY, height - hudHeight));
+        int[] b = getHudBounds();
+        int hudX = b[0], hudY = b[1], hudW = b[2], hudH = b[3];
 
-        CpsHudOverlay.renderPreview(drawContext, counter, hudX, hudY);
+        CpsHudOverlay.drawCounter(drawContext, rc(), hudX, hudY);
 
         long time = System.currentTimeMillis();
         float dashPhase = (time % 2000) / 2000.0f;
-        drawAnimatedBorder(drawContext, hudX - 2, hudY - 2, hudWidth + 4, hudHeight + 4, 0xFFFFFFFF, dashPhase);
+        int bx = hudX - 2, by = hudY - 2, bw = hudW + 4, bh = hudH + 4;
+        drawAnimatedBorder(drawContext, bx, by, bw, bh, DrawUtils.KNOB, dashPhase);
 
-        boolean onRightEdge = mouseX >= hudX + hudWidth - EDGE_ZONE && mouseX <= hudX + hudWidth + 2;
-        boolean onBottomEdge = mouseY >= hudY + hudHeight - EDGE_ZONE && mouseY <= hudY + hudHeight + 2;
-        boolean onCorner = onRightEdge && onBottomEdge;
+        drawHandleDots(drawContext, hudX, hudY, hudW, hudH);
 
-        if (onCorner) {
-            drawContext.fill(hudX + hudWidth - 8, hudY + hudHeight, hudX + hudWidth, hudY + hudHeight + 2, 0xFF4FC3F7);
-            drawContext.fill(hudX + hudWidth, hudY + hudHeight - 8, hudX + hudWidth + 2, hudY + hudHeight, 0xFF4FC3F7);
-        } else if (onRightEdge || onBottomEdge) {
-            drawContext.fill(hudX + hudWidth - EDGE_ZONE, hudY + hudHeight, hudX + hudWidth + 2, hudY + hudHeight + 2, 0xFF4FC3F7);
-            drawContext.fill(hudX + hudWidth, hudY + hudHeight - EDGE_ZONE, hudX + hudWidth + 2, hudY + hudHeight + 2, 0xFF4FC3F7);
+        Handle hovered = getHandleAt(mouseX, mouseY, hudX, hudY, hudW, hudH);
+        if (hovered != Handle.NONE) {
+            drawContext.drawCenteredTextWithShadow(textRenderer, getHandleTooltip(hovered), width / 2, height / 2 - 12, DrawUtils.ACCENT_DIM);
         }
 
-        drawContext.drawCenteredTextWithShadow(textRenderer, "ESC to confirm", width / 2, height / 2, 0xFFFFFF);
+        drawContext.drawCenteredTextWithShadow(textRenderer, "ESC to confirm", width / 2, height / 2, DrawUtils.KNOB);
     }
 
-    @Override
-    public void onDisplayed() {
-        CpsHudOverlay.setSnappingActive(true);
+    private void drawHandleDots(DrawContext dc, int hx, int hy, int hw, int hh) {
+        int[][] dots = getDotPositions(hx, hy, hw, hh);
+        for (int[] dot : dots) {
+            int x = dot[0], y = dot[1];
+            boolean isActive = dot == getActiveDot(hx, hy, hw, hh);
+        int color = isActive ? DrawUtils.ACCENT : DrawUtils.KNOB;
+        dc.fill(x - DOT_RADIUS, y - DOT_RADIUS, x + DOT_RADIUS, y + DOT_RADIUS, 0xFF000000);
+            dc.fill(x - DOT_RADIUS + 1, y - DOT_RADIUS + 1, x + DOT_RADIUS - 1, y + DOT_RADIUS - 1, color);
+        }
+    }
+
+    private int[][] getDotPositions(int hx, int hy, int hw, int hh) {
+        int cx = hx + hw / 2, cy = hy + hh / 2;
+        int r = hx + hw, b = hy + hh;
+        return new int[][]{
+            {hx, hy}, {cx, hy}, {r, hy},
+            {r, cy},
+            {r, b}, {cx, b}, {hx, b},
+            {hx, cy}
+        };
+    }
+
+    private int[] getActiveDot(int hx, int hy, int hw, int hh) {
+        if (activeHandle == Handle.NONE) return null;
+        int[][] dots = getDotPositions(hx, hy, hw, hh);
+        int idx = activeHandle.ordinal() - 1;
+        return idx >= 0 && idx < dots.length ? dots[idx] : null;
+    }
+
+    private String getHandleTooltip(Handle h) {
+        return switch (h) {
+            case TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT -> "Drag to resize";
+            case TOP, BOTTOM -> "Drag to resize height";
+            case LEFT, RIGHT -> "Drag to resize width";
+            default -> "";
+        };
+    }
+
+    private Handle getHandleAt(int mx, int my, int hx, int hy, int hw, int hh) {
+        int[][] dots = getDotPositions(hx, hy, hw, hh);
+        Handle[] handles = Handle.values();
+        for (int i = 0; i < dots.length; i++) {
+            int dx = mx - dots[i][0], dy = my - dots[i][1];
+            if (dx * dx + dy * dy <= DOT_HIT_RADIUS * DOT_HIT_RADIUS) {
+                return handles[i + 1];
+            }
+        }
+        return Handle.NONE;
     }
 
     private void drawAnimatedBorder(DrawContext dc, int x, int y, int w, int h, int color, float phase) {
@@ -114,20 +188,27 @@ public class HudPositionScreen extends Screen {
         if (counter == null) return true;
 
         double mx = click.x(), my = click.y();
-        int hudWidth = CpsHudOverlay.getHudWidth(counter);
-        int hudHeight = CpsHudOverlay.getHudHeight(counter);
-        int hudX = Math.max(0, Math.min((int) (counter.posX * (width - hudWidth)), width - hudWidth));
-        int hudY = Math.max(0, Math.min((int) (counter.posY * (height - hudHeight)), height - hudHeight));
+        int[] b = getHudBounds();
+        int hudX = b[0], hudY = b[1], hudW = b[2], hudH = b[3];
 
-        boolean onRightEdge = mx >= hudX + hudWidth - EDGE_ZONE && mx <= hudX + hudWidth + 2 && my >= hudY - 2 && my <= hudY + hudHeight + 2;
-        boolean onBottomEdge = my >= hudY + hudHeight - EDGE_ZONE && my <= hudY + hudHeight + 2 && mx >= hudX - 2 && mx <= hudX + hudWidth + 2;
-
-        if (onRightEdge || onBottomEdge) {
-            resizing = true; resizeAnchorX = hudX; resizeAnchorY = hudY; resizeStartScale = counter.scale; return true;
+        Handle hit = getHandleAt((int) mx, (int) my, hudX, hudY, hudW, hudH);
+        if (hit != Handle.NONE) {
+            activeHandle = hit;
+            dragStartX = mx;
+            dragStartY = my;
+            dragStartHudW = hudW;
+            dragStartHudH = hudH;
+            dragStartScale = counter.scale;
+            dragStartScreenX = hudX;
+            dragStartScreenY = hudY;
+            return true;
         }
 
-        if (mx >= hudX - 2 && mx <= hudX + hudWidth + 2 && my >= hudY - 2 && my <= hudY + hudHeight + 2) {
-            dragging = true; dragOffsetX = mx - hudX; dragOffsetY = my - hudY; return true;
+        if (mx >= hudX - 2 && mx <= hudX + hudW + 2 && my >= hudY - 2 && my <= hudY + hudH + 2) {
+            dragging = true;
+            dragOffsetX = mx - hudX;
+            dragOffsetY = my - hudY;
+            return true;
         }
 
         return super.mouseClicked(click, always);
@@ -136,32 +217,59 @@ public class HudPositionScreen extends Screen {
     @Override
     public boolean mouseDragged(Click click, double dragX, double dragY) {
         if (counter == null) return super.mouseDragged(click, dragX, dragY);
+
         double mx = click.x(), my = click.y();
 
-        if (resizing) {
-            float oldScale = (float) Math.max(0.5, Math.min(2.0, resizeStartScale));
-            int oldWidth = CpsHudOverlay.getHudWidth(counter);
-            int oldHeight = CpsHudOverlay.getHudHeight(counter);
-            double dx = mx - resizeAnchorX, dy = my - resizeAnchorY;
-            double baseWidth = oldWidth / oldScale, baseHeight = oldHeight / oldScale;
-            if (baseWidth <= 0) baseWidth = 50;
-            if (baseHeight <= 0) baseHeight = 20;
-            double newScale = Math.max(dx / baseWidth, dy / baseHeight);
+        if (activeHandle != Handle.NONE) {
+            double rawDx = mx - dragStartX;
+            double rawDy = my - dragStartY;
+            if (Math.abs(rawDx) < DEADZONE) rawDx = 0;
+            if (Math.abs(rawDy) < DEADZONE) rawDy = 0;
+
+            float oldScale = (float) Math.max(0.5, Math.min(2.0, dragStartScale));
+            double baseW = dragStartHudW / oldScale;
+            double baseH = dragStartHudH / oldScale;
+            if (baseW <= 0) baseW = 50;
+            if (baseH <= 0) baseH = 20;
+
+            double dx = rawDx;
+            double dy = rawDy;
+
+            boolean hasX = activeHandle == Handle.LEFT || activeHandle == Handle.RIGHT
+                || activeHandle == Handle.TOP_LEFT || activeHandle == Handle.TOP_RIGHT
+                || activeHandle == Handle.BOTTOM_LEFT || activeHandle == Handle.BOTTOM_RIGHT;
+            boolean hasY = activeHandle == Handle.TOP || activeHandle == Handle.BOTTOM
+                || activeHandle == Handle.TOP_LEFT || activeHandle == Handle.TOP_RIGHT
+                || activeHandle == Handle.BOTTOM_LEFT || activeHandle == Handle.BOTTOM_RIGHT;
+
+            if (hasX && !hasY) {
+                dx = activeHandle == Handle.RIGHT ? dx : -dx;
+                dy = 0;
+            } else if (hasY && !hasX) {
+                dy = activeHandle == Handle.BOTTOM ? dy : -dy;
+                dx = 0;
+            } else {
+                dx = (activeHandle == Handle.RIGHT || activeHandle == Handle.BOTTOM_RIGHT || activeHandle == Handle.TOP_RIGHT) ? dx : -dx;
+                dy = (activeHandle == Handle.BOTTOM || activeHandle == Handle.BOTTOM_RIGHT || activeHandle == Handle.BOTTOM_LEFT) ? dy : -dy;
+            }
+
+            double scaleDelta = (hasX && hasY) ? (dx + dy) / 2.0 : (hasX ? dx : dy);
+            double avgBase = (baseW + baseH) / 2.0;
+            double newScale = oldScale + scaleDelta / avgBase;
             newScale = Math.round(newScale * 10.0) / 10.0;
             counter.scale = Math.max(0.5, Math.min(2.0, newScale));
             return true;
         }
 
         if (dragging) {
-            int hudWidth = CpsHudOverlay.getHudWidth(counter);
-            int hudHeight = CpsHudOverlay.getHudHeight(counter);
-            int newHudX = Math.max(0, Math.min((int) (mx - dragOffsetX), width - hudWidth));
-            int newHudY = Math.max(0, Math.min((int) (my - dragOffsetY), height - hudHeight));
-            counter.posX = (width - hudWidth) > 0 ? (double) newHudX / (width - hudWidth) : 0.0;
-            counter.posY = (height - hudHeight) > 0 ? (double) newHudY / (height - hudHeight) : 0.0;
+            CpsHudOverlay.ResolvedCounter rc = rc();
+            int newHudX = Math.max(0, Math.min((int) (mx - dragOffsetX), width - rc.w()));
+            int newHudY = Math.max(0, Math.min((int) (my - dragOffsetY), height - rc.h()));
+            counter.posX = (width - rc.w()) > 0 ? (double) newHudX / (width - rc.w()) : 0.0;
+            counter.posY = (height - rc.h()) > 0 ? (double) newHudY / (height - rc.h()) : 0.0;
             counter.posX = Math.max(0.0, Math.min(1.0, counter.posX));
             counter.posY = Math.max(0.0, Math.min(1.0, counter.posY));
-            counter.presetName = detectPresetName(counter.posX, counter.posY);
+            counter.presetName = CounterEntry.detectPreset(counter.posX, counter.posY);
             return true;
         }
 
@@ -170,17 +278,17 @@ public class HudPositionScreen extends Screen {
 
     @Override
     public boolean mouseReleased(Click click) {
-        if (dragging) { dragging = false; ModConfig.getConfig().save(); return true; }
-        if (resizing) { resizing = false; ModConfig.getConfig().save(); return true; }
+        if (dragging) {
+            dragging = false;
+            ModConfig.getConfig().save();
+            return true;
+        }
+        if (activeHandle != Handle.NONE) {
+            activeHandle = Handle.NONE;
+            ModConfig.getConfig().save();
+            return true;
+        }
         return super.mouseReleased(click);
-    }
-
-    private String detectPresetName(double posX, double posY) {
-        if (Math.abs(posX) < 0.01 && Math.abs(posY) < 0.01) return "Top-Left";
-        if (Math.abs(posX - 1.0) < 0.01 && Math.abs(posY) < 0.01) return "Top-Right";
-        if (Math.abs(posX) < 0.01 && Math.abs(posY - 1.0) < 0.01) return "Bottom-Left";
-        if (Math.abs(posX - 1.0) < 0.01 && Math.abs(posY - 1.0) < 0.01) return "Bottom-Right";
-        return "Custom";
     }
 
     @Override

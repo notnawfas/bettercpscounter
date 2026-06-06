@@ -3,7 +3,11 @@ plugins {
     id 'java'
 }
 
-version = project.mod_version
+def commitCount = providers.exec {
+  commandLine 'git', 'rev-list', '--count', 'HEAD'
+}.standardOutput.asText.get().trim()
+
+version = "${project.mod_version}.${commitCount}"
 group = project.maven_group
 
 repositories {
@@ -37,8 +41,4 @@ java {
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
     withSourcesJar()
-}
-
-jar {
-    from 'LICENSE'
 }

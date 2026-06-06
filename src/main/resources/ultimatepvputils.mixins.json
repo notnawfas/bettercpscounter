@@ -3,10 +3,11 @@
   "minVersion": "0.8",
   "package": "com.notnawfas.ultimatepvputils.mixin",
   "compatibilityLevel": "JAVA_21",
-  "client": [
-    "MouseHandlerMixin",
-    "KeyboardHandlerMixin"
-  ],
+    "client": [
+        "MouseHandlerMixin",
+        "KeyboardHandlerMixin",
+        "HeldItemRendererMixin"
+    ],
   "injectors": {
     "defaultRequire": 1
   }

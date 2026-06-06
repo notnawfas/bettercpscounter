@@ -9,14 +9,11 @@ public class UltimatePvPUtils implements ModInitializer {
 
     public static final String MOD_ID = "ultimatepvputils";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+    public static final String MOD_VERSION = "@VERSION@";
 
     @Override
     public void onInitialize() {
         ModConfig.init();
-        LOGGER.info("=========================================");
-        LOGGER.info("ULTIMATE PVP UTILS - v1.0 - by notnawfas");
-        LOGGER.info("[INFO] Initializing...");
-        LOGGER.info("[INFO] Initialized!");
-        LOGGER.info("=========================================");
+        LOGGER.info("Ultimate PvP Utils v{} initialized", MOD_VERSION);
     }
 }

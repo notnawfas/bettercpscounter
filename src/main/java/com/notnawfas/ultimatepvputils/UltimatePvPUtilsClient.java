@@ -10,6 +10,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import org.lwjgl.glfw.GLFW;
 
@@ -19,27 +20,27 @@ public class UltimatePvPUtilsClient implements ClientModInitializer {
 
     private static final KeyBinding.Category MOD_CATEGORY = KeyBinding.Category.create(Identifier.of("ultimatepvputils", "keybindings"));
 
+    private static boolean hasShownHint = false;
+
     @Override
     public void onInitializeClient() {
         HudRenderCallback.EVENT.register(new CpsHudOverlay());
 
         configKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.ultimatepvputils.open_config",
-                InputUtil.Type.KEYSYM,
-                GLFW.GLFW_KEY_F7,
-                MOD_CATEGORY
+            "key.ultimatepvputils.open_config",
+            InputUtil.Type.KEYSYM,
+            GLFW.GLFW_KEY_F7,
+            MOD_CATEGORY
         ));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (configKey.wasPressed()) {
                 client.setScreen(new ModConfigScreen(null));
             }
+            if (!hasShownHint && client.player != null) {
+                hasShownHint = true;
+                client.player.sendMessage(Text.literal("§b[Ultimate PvP Utils]§7 Press §bF7§7 to open config"), false);
+            }
         });
-
-        UltimatePvPUtils.LOGGER.info("=========================================");
-        UltimatePvPUtils.LOGGER.info("ULTIMATE PVP UTILS - v1.0 - by notnawfas");
-        UltimatePvPUtils.LOGGER.info("[INFO] Initializing...");
-        UltimatePvPUtils.LOGGER.info("[INFO] Initialized!");
-        UltimatePvPUtils.LOGGER.info("=========================================");
     }
 }

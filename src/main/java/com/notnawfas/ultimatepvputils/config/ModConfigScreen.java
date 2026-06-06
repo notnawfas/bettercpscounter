@@ -1,7 +1,10 @@
 package com.notnawfas.ultimatepvputils.config;
 
+import com.notnawfas.ultimatepvputils.cps.CpsVariable;
 import com.notnawfas.ultimatepvputils.hud.ColorPickerScreen;
+import com.notnawfas.ultimatepvputils.hud.DrawUtils;
 import com.notnawfas.ultimatepvputils.hud.HudPositionScreen;
+import com.notnawfas.ultimatepvputils.hud.ShieldCustomizeScreen;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.Click;
@@ -9,8 +12,10 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
-import java.util.ArrayList;
+import java.util.ArrayList;import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
 
 public class ModConfigScreen extends Screen {
 
@@ -19,9 +24,29 @@ public class ModConfigScreen extends Screen {
     private static final int WIDGET_HEIGHT = 20;
     private static final int WIDGET_SPACING = 6;
     private static final int CARD_PADDING = 8;
-    private static final String[] PRESETS = {"Top-Left", "Top-Right", "Bottom-Left", "Bottom-Right", "Custom"};
+    private static final int COLLAPSED_HEIGHT = 28;
+    private static final int MAX_FIELD_WIDTH = 400;
+    private static final int SCROLLBAR_WIDTH = 4;
+    private static final float ANIM_SPEED = 0.18f;
+    private static final float ANIM_THRESHOLD = 0.5f;
+
+    private static final int LABEL_H = 14;
+    private static final int FIELD_H = 20;
+    private static final int FIELD_GAP = 4;
+    private static final int TOGGLE_H = WIDGET_HEIGHT;
+    private static final int SWATCH_H = WIDGET_HEIGHT;
+    private static final int SLIDER_H = WIDGET_HEIGHT;
+    private static final int DOCS_H = 18;
+    private static final int PRESET_H = 22;
+    private static final int EDIT_BTN_H = 22;
+    private static final int RESET_BTN_H = 20;
+
+    private static final int TAB_CPS = 0;
+    private static final int TAB_VISUALS = 1;
 
     private final Screen parent;
+    private int activeTab = TAB_CPS;
+
     private int expandedCardIndex = -1;
 
     private int focusedCardIndex = -1;
@@ -30,14 +55,22 @@ public class ModConfigScreen extends Screen {
     private final List<Integer> cardFieldCursors = new ArrayList<>();
     private final List<String> nameFieldTexts = new ArrayList<>();
     private final List<Integer> nameFieldCursors = new ArrayList<>();
+    private final List<Integer> cardFieldScrolls = new ArrayList<>();
+    private final List<Integer> nameFieldScrolls = new ArrayList<>();
+    private long cursorBlinkStart = System.currentTimeMillis();
+
+    private final Map<Integer, Float> cardAnimProgress = new HashMap<>();
+    private long lastFrameTime = System.nanoTime();
 
     private boolean sliderDragging = false;
     private int sliderCardIndex = -1;
+    private int sliderContentWidth = 0;
 
     private int scrollOffset = 0;
 
     private int pendingDeleteIndex = -1;
     private long pendingDeleteTime = 0;
+    private int pendingDeleteVersion = -1;
 
     public ModConfigScreen(Screen parent) {
         super(Text.literal("Ultimate PvP Utils"));
@@ -47,8 +80,8 @@ public class ModConfigScreen extends Screen {
 
     private void syncFieldTexts() {
         List<CounterEntry> counters = ModConfig.getConfig().counters;
-        while (cardFieldTexts.size() < counters.size()) { cardFieldTexts.add(""); cardFieldCursors.add(0); nameFieldTexts.add(""); nameFieldCursors.add(0); }
-        while (cardFieldTexts.size() > counters.size()) { cardFieldTexts.remove(cardFieldTexts.size() - 1); cardFieldCursors.remove(cardFieldCursors.size() - 1); nameFieldTexts.remove(nameFieldTexts.size() - 1); nameFieldCursors.remove(nameFieldCursors.size() - 1); }
+        while (cardFieldTexts.size() < counters.size()) { cardFieldTexts.add(""); cardFieldCursors.add(0); cardFieldScrolls.add(0); nameFieldTexts.add(""); nameFieldCursors.add(0); nameFieldScrolls.add(0); }
+        while (cardFieldTexts.size() > counters.size()) { cardFieldTexts.remove(cardFieldTexts.size() - 1); cardFieldCursors.remove(cardFieldCursors.size() - 1); cardFieldScrolls.remove(cardFieldScrolls.size() - 1); nameFieldTexts.remove(nameFieldTexts.size() - 1); nameFieldCursors.remove(nameFieldCursors.size() - 1); nameFieldScrolls.remove(nameFieldScrolls.size() - 1); }
         for (int i = 0; i < counters.size(); i++) {
             if (focusedCardIndex != i || focusedFieldIndex != 0) cardFieldTexts.set(i, counters.get(i).displayFormat);
             if (cardFieldCursors.get(i) > cardFieldTexts.get(i).length()) cardFieldCursors.set(i, cardFieldTexts.get(i).length());
@@ -57,62 +90,129 @@ public class ModConfigScreen extends Screen {
         }
     }
 
+    private int getExpandedCardHeight() {
+        return COLLAPSED_HEIGHT + CARD_PADDING
+            + LABEL_H + FIELD_H + FIELD_GAP
+            + LABEL_H + FIELD_H + FIELD_GAP
+            + DOCS_H
+            + TOGGLE_H + WIDGET_SPACING
+            + LABEL_H + SWATCH_H + WIDGET_SPACING + FIELD_GAP
+            + LABEL_H + SLIDER_H
+            + WIDGET_SPACING + FIELD_GAP
+            + LABEL_H + PRESET_H
+            + WIDGET_SPACING + FIELD_GAP
+            + EDIT_BTN_H + WIDGET_SPACING
+            + RESET_BTN_H + WIDGET_SPACING
+            + CARD_PADDING;
+    }
+
+    private float getCardProgress(int index) {
+        Float p = cardAnimProgress.get(index);
+        return p != null ? p : 0f;
+    }
+
+    private int getAnimatedCardHeight(int index) {
+        float t = getCardProgress(index);
+        if (t <= 0f) return COLLAPSED_HEIGHT;
+        if (t >= 1f) return getExpandedCardHeight();
+        return (int) (COLLAPSED_HEIGHT + (getExpandedCardHeight() - COLLAPSED_HEIGHT) * t);
+    }
+
+    private void tickAnimations() {
+        long now = System.nanoTime();
+        float dt = Math.min((now - lastFrameTime) / 1_000_000_000f, 0.1f);
+        lastFrameTime = now;
+
+        for (int i = 0; i < ModConfig.getConfig().counters.size(); i++) {
+            float current = getCardProgress(i);
+            float target = (i == expandedCardIndex) ? 1f : 0f;
+            if (Math.abs(current - target) < 0.005f) {
+                cardAnimProgress.put(i, target);
+            } else {
+                float next = current + (target - current) * Math.min(ANIM_SPEED * 60f * dt, 0.999f);
+                next = Math.max(0f, Math.min(1f, next));
+                cardAnimProgress.put(i, next);
+            }
+        }
+
+        cardAnimProgress.keySet().removeIf(i -> i >= ModConfig.getConfig().counters.size());
+    }
+
     private int getTotalContentHeight() {
+        if (activeTab == TAB_VISUALS) return getVisualsContentHeight();
         List<CounterEntry> counters = ModConfig.getConfig().counters;
         if (counters.isEmpty()) return 32 + 40 + 22 + WIDGET_SPACING;
         int h = 32;
         for (int i = 0; i < counters.size(); i++) {
-            h += (i == expandedCardIndex ? getExpandedCardHeight() : 28) + WIDGET_SPACING;
+            h += getAnimatedCardHeight(i) + WIDGET_SPACING;
         }
         h += 4 + 22;
         return h;
     }
 
+    private int getVisualsContentHeight() {
+        return 32 + COLLAPSED_HEIGHT + WIDGET_SPACING;
+    }
+
+    private long lastSaveFlush = System.currentTimeMillis();
+
+    @Override
+    public void tick() {
+        super.tick();
+        long now = System.currentTimeMillis();
+        if (now - lastSaveFlush > 5000) {
+            lastSaveFlush = now;
+            ModConfig.getConfig().flushIfDirty();
+        }
+    }
+
     @Override
     public void render(DrawContext dc, int mx, int my, float delta) {
-        super.render(dc, mx, my, delta);
+        tickAnimations();
+        renderBackground(dc, mx, my, delta);
         drawSidebar(dc, mx, my);
-        drawCpsTab(dc, ModConfig.getConfig(), SIDEBAR_WIDTH + PADDING, width - SIDEBAR_WIDTH - PADDING * 2, mx, my);
-        dc.drawCenteredTextWithShadow(textRenderer, title, width / 2, 8, 0xFFFFFF);
+
+        int contentX = SIDEBAR_WIDTH + PADDING;
+        int contentW = width - SIDEBAR_WIDTH - PADDING * 2;
+
+        if (activeTab == TAB_CPS) {
+            drawCpsTab(dc, ModConfig.getConfig(), contentX, contentW, mx, my);
+        } else {
+            drawVisualsTab(dc, contentX, contentW, mx, my);
+        }
+
+        dc.drawCenteredTextWithShadow(textRenderer, title, SIDEBAR_WIDTH + (width - SIDEBAR_WIDTH) / 2, 8, 0xFFFFFF);
     }
 
     @Override
     public void renderBackground(DrawContext dc, int mx, int my, float delta) {
-        dc.fill(0, 0, this.width, this.height, 0xC0101010);
+        dc.fill(0, 0, this.width, this.height, DrawUtils.OVERLAY_BG);
     }
 
     private void drawSidebar(DrawContext dc, int mx, int my) {
         int x = 0, y = 24;
-        dc.fill(x, y, x + SIDEBAR_WIDTH, height, 0xC0101010);
+        dc.fill(x, y, x + SIDEBAR_WIDTH, height, DrawUtils.OVERLAY_BG);
 
         ModConfig config = ModConfig.getConfig();
         drawToggleRow(dc, "HUD Enabled", config.enabled, x + 8, y + 4, SIDEBAR_WIDTH - 16, mx, my);
         y += WIDGET_HEIGHT + 12;
 
-        dc.fill(x, y, x + SIDEBAR_WIDTH, y + 1, 0x30FFFFFF);
+        dc.fill(x, y, x + SIDEBAR_WIDTH, y + 1, DrawUtils.HOVER_TINT);
         y += 8;
 
-        boolean hovered = mx >= x && mx < x + SIDEBAR_WIDTH && my >= y && my < y + 28;
-        if (hovered) dc.fill(x, y, x + SIDEBAR_WIDTH, y + 28, 0x20FFFFFF);
-        dc.fill(x, y, x + 2, y + 28, 0xFF4FC3F7);
-        dc.drawTextWithShadow(textRenderer, "CPS Counter", x + 14, y + 9, 0xFF4FC3F7);
+        String[] tabs = {"CPS Counter", "Visuals"};
+        int[] tabIds = {TAB_CPS, TAB_VISUALS};
+        for (int i = 0; i < tabs.length; i++) {
+            boolean isActive = activeTab == tabIds[i];
+            boolean hovered = mx >= x && mx < x + SIDEBAR_WIDTH && my >= y && my < y + 28;
+            if (hovered && !isActive) dc.fill(x, y, x + SIDEBAR_WIDTH, y + 28, DrawUtils.HOVER_TINT);
+            if (isActive) dc.fill(x, y, x + 2, y + 28, DrawUtils.ACCENT);
+            dc.drawTextWithShadow(textRenderer, tabs[i], x + 14, y + 9, isActive ? DrawUtils.ACCENT : DrawUtils.TEXT_DIM);
+            y += 28;
+        }
     }
 
-    private int getExpandedCardHeight() {
-        return 28 + CARD_PADDING
-                + 14 + 20 + 4
-                + 14 + 20 + 4
-                + 18
-                + WIDGET_HEIGHT + WIDGET_SPACING
-                + 14 + 20 + WIDGET_SPACING + 4
-                + 14 + 20
-                + WIDGET_SPACING + 8
-                + 14 + 20
-                + WIDGET_SPACING + 8
-                + 14 + 22 + WIDGET_SPACING
-                + (22 + WIDGET_SPACING)
-                + CARD_PADDING;
-    }
+    // ========== CPS Tab ==========
 
     private void drawCpsTab(DrawContext dc, ModConfig config, int x, int w, int mx, int my) {
         int maxScroll = Math.max(0, getTotalContentHeight() - (height - 24));
@@ -122,7 +222,7 @@ public class ModConfigScreen extends Screen {
         List<CounterEntry> counters = config.counters;
 
         if (counters.isEmpty()) {
-            dc.drawCenteredTextWithShadow(textRenderer, "No Counters Found", x + w / 2, cy + 20, 0xFF888888);
+            dc.drawCenteredTextWithShadow(textRenderer, "No Counters Found", x + w / 2, cy + 20, DrawUtils.TEXT_DIM);
             cy += 40;
             drawAddButton(dc, x, cy, w, mx, my);
             return;
@@ -130,151 +230,208 @@ public class ModConfigScreen extends Screen {
 
         for (int i = 0; i < counters.size(); i++) {
             CounterEntry entry = counters.get(i);
-            boolean expanded = (i == expandedCardIndex);
-            int cardH = expanded ? getExpandedCardHeight() : 28;
-            drawCard(dc, entry, i, expanded, x, cy, w, cardH, mx, my);
+            int cardH = getAnimatedCardHeight(i);
+            drawCard(dc, entry, i, x, cy, w, cardH, mx, my);
             cy += cardH + WIDGET_SPACING;
         }
 
         drawAddButton(dc, x, cy + 4, w, mx, my);
+        drawScrollbar(dc, x, w, maxScroll);
     }
 
-    private void drawCard(DrawContext dc, CounterEntry entry, int index, boolean expanded, int x, int y, int w, int cardH, int mx, int my) {
-        dc.fill(x, y, x + w, y + cardH, 0xFF1E1E1E);
-        dc.fill(x, y, x + w, y + 1, 0xFF444444);
-        dc.fill(x, y + cardH - 1, x + w, y + cardH, 0xFF333333);
-        dc.fill(x, y, x + 1, y + cardH, 0xFF444444);
-        dc.fill(x + w - 1, y, x + w, y + cardH, 0xFF444444);
+    // ========== Visuals Tab ==========
 
-        String arrow = expanded ? "\u25BC" : "\u25B6";
-        boolean arrowHovered = mx >= x && mx < x + 24 && my >= y && my < y + 28;
-        dc.drawTextWithShadow(textRenderer, arrow, x + 6, y + 9, arrowHovered ? 0xFF4FC3F7 : 0xFFAAAAAA);
-        dc.drawTextWithShadow(textRenderer, entry.name, x + 24, y + 9, 0xFFE0E0E0);
+    private void drawVisualsTab(DrawContext dc, int x, int w, int mx, int my) {
+        int maxScroll = Math.max(0, getTotalContentHeight() - (height - 24));
+        scrollOffset = Math.max(-maxScroll, Math.min(0, scrollOffset));
+
+        int cy = 32 + scrollOffset;
+
+        drawShieldCard(dc, x, cy, w, mx, my);
+
+        drawScrollbar(dc, x, w, maxScroll);
+    }
+
+    private void drawShieldCard(DrawContext dc, int x, int y, int w, int mx, int my) {
+        dc.fill(x, y, x + w, y + COLLAPSED_HEIGHT, DrawUtils.CARD_BG);
+        dc.fill(x, y, x + w, y + 1, DrawUtils.BORDER);
+        dc.fill(x, y + COLLAPSED_HEIGHT - 1, x + w, y + COLLAPSED_HEIGHT, DrawUtils.BORDER_LIGHT);
+        dc.fill(x, y, x + 1, y + COLLAPSED_HEIGHT, DrawUtils.BORDER);
+        dc.fill(x + w - 1, y, x + w, y + COLLAPSED_HEIGHT, DrawUtils.BORDER);
+
+        dc.drawTextWithShadow(textRenderer, "\u26E8", x + 6, y + 9, DrawUtils.ACCENT);
+        dc.drawTextWithShadow(textRenderer, "Shield", x + 24, y + 9, DrawUtils.TEXT_PRIMARY);
+
+        int btnW = 70, btnH = 18;
+        int btnX = x + w - CARD_PADDING - btnW;
+        int btnY = y + (COLLAPSED_HEIGHT - btnH) / 2;
+        boolean btnHovered = mx >= btnX && mx < btnX + btnW && my >= btnY && my < btnY + btnH;
+        dc.fill(btnX, btnY, btnX + btnW, btnY + btnH, btnHovered ? DrawUtils.BTN_HOVER : DrawUtils.BTN_BG);
+        DrawUtils.drawBorder(dc, btnX, btnY, btnW, btnH, DrawUtils.BORDER_DIM);
+        dc.drawCenteredTextWithShadow(textRenderer, "Customize", btnX + btnW / 2, btnY + 5, DrawUtils.ACCENT);
+    }
+
+    private void drawScrollbar(DrawContext dc, int x, int w, int maxScroll) {
+        if (maxScroll <= 0) return;
+        int viewH = height - 24;
+        int totalH = getTotalContentHeight();
+        int trackY = 32;
+        int trackH = viewH - 32;
+        int thumbH = Math.max(20, (int)((float)viewH / totalH * trackH));
+        int thumbY = trackY + (int)((float)(-scrollOffset) / maxScroll * (trackH - thumbH));
+        int trackX = x + w - SCROLLBAR_WIDTH - 2;
+        dc.fill(trackX, trackY, trackX + SCROLLBAR_WIDTH, trackY + trackH, DrawUtils.HOVER_TINT);
+        dc.fill(trackX, thumbY, trackX + SCROLLBAR_WIDTH, thumbY + thumbH, 0x80FFFFFF);
+    }
+
+    // ========== Card Rendering ==========
+
+    private void drawCard(DrawContext dc, CounterEntry entry, int index, int x, int y, int w, int cardH, int mx, int my) {
+        dc.fill(x, y, x + w, y + cardH, DrawUtils.CARD_BG);
+        dc.fill(x, y, x + w, y + 1, DrawUtils.BORDER);
+        dc.fill(x, y + cardH - 1, x + w, y + cardH, DrawUtils.BORDER_LIGHT);
+        dc.fill(x, y, x + 1, y + cardH, DrawUtils.BORDER);
+        dc.fill(x + w - 1, y, x + w, y + cardH, DrawUtils.BORDER);
+
+        float progress = getCardProgress(index);
+        boolean isExpanded = progress > ANIM_THRESHOLD;
+
+        String arrow = isExpanded ? "\u25BC" : "\u25B6";
+        boolean arrowHovered = mx >= x && mx < x + 24 && my >= y && my < y + COLLAPSED_HEIGHT;
+        dc.drawTextWithShadow(textRenderer, arrow, x + 6, y + 9, arrowHovered ? DrawUtils.ACCENT : DrawUtils.ARROW_IDLE);
+        dc.drawTextWithShadow(textRenderer, entry.name, x + 24, y + 9, DrawUtils.TEXT_PRIMARY);
 
         int deleteX = x + w - 18;
-        boolean deleteHovered = mx >= deleteX && mx < x + w && my >= y && my < y + 28;
+        boolean deleteHovered = mx >= deleteX && mx < x + w && my >= y && my < y + COLLAPSED_HEIGHT;
 
-        if (pendingDeleteIndex == index && System.currentTimeMillis() - pendingDeleteTime < 3000) {
-            dc.drawTextWithShadow(textRenderer, "\u2715", deleteX, y + 9, 0xFFFF8800);
+        if (pendingDeleteIndex == index && pendingDeleteVersion == ModConfig.getConfig().counters.size() && System.currentTimeMillis() - pendingDeleteTime < 3000) {
+            dc.drawTextWithShadow(textRenderer, "\u2715", deleteX, y + 9, DrawUtils.DELETE_WARN);
             int confirmX = deleteX - 50;
-            dc.drawTextWithShadow(textRenderer, "Confirm?", confirmX, y + 9, 0xFFFF8800);
+            int confirmW = textRenderer.getWidth("Confirm?");
+            dc.fill(confirmX - 3, y + 6, confirmX + confirmW + 3, y + 20, DrawUtils.DELETE_CONFIRM_BG);
+            DrawUtils.drawBorder(dc, confirmX - 3, y + 6, confirmW + 6, 14, DrawUtils.DELETE_WARN);
+            dc.drawTextWithShadow(textRenderer, "Confirm?", confirmX, y + 9, DrawUtils.DELETE_WARN);
         } else {
-            dc.drawTextWithShadow(textRenderer, "\u2715", deleteX, y + 9, deleteHovered ? 0xFFFF4444 : 0xFF666666);
+            dc.drawTextWithShadow(textRenderer, "\u2715", deleteX, y + 9, deleteHovered ? DrawUtils.DELETE_HOVER : DrawUtils.DELETE_IDLE);
         }
 
-        if (!expanded) return;
+        if (progress <= 0f) return;
 
         int cx = x + CARD_PADDING;
         int cw = w - CARD_PADDING * 2;
-        int cy = y + 28 + CARD_PADDING;
+        int visibleBodyH = cardH - COLLAPSED_HEIGHT;
 
-        // Name
-        dc.drawTextWithShadow(textRenderer, "Name:", cx, cy, 0xFFCCCCCC);
-        cy += 14;
-        String nameText = nameFieldTexts.size() > index ? nameFieldTexts.get(index) : entry.name;
-        dc.fill(cx, cy, cx + cw, cy + 20, 0xFF1A1A1A);
-        drawBorder(dc, cx, cy, cw, 20, focusedCardIndex == index && focusedFieldIndex == 1 ? 0xFF4FC3F7 : 0xFF444444);
-        String nameDisplay = nameText;
-        if (focusedCardIndex == index && focusedFieldIndex == 1 && (System.currentTimeMillis() / 500) % 2 == 0) {
-            int cursor = nameFieldCursors.size() > index ? nameFieldCursors.get(index) : nameText.length();
-            nameDisplay = nameText.substring(0, Math.min(cursor, nameText.length())) + "|" + nameText.substring(Math.min(cursor, nameText.length()));
-        }
-        dc.drawTextWithShadow(textRenderer, nameDisplay, cx + 4, cy + 6, 0xFFE0E0E0);
-        cy += 20 + 4;
+        dc.enableScissor(x, y + COLLAPSED_HEIGHT, x + w, y + COLLAPSED_HEIGHT + visibleBodyH);
 
-        // Display Format
-        dc.drawTextWithShadow(textRenderer, "Display Format:", cx, cy, 0xFFCCCCCC);
-        cy += 14;
-        String formatText = cardFieldTexts.size() > index ? cardFieldTexts.get(index) : entry.displayFormat;
-        dc.fill(cx, cy, cx + cw, cy + 20, 0xFF1A1A1A);
-        drawBorder(dc, cx, cy, cw, 20, focusedCardIndex == index && focusedFieldIndex == 0 ? 0xFF4FC3F7 : 0xFF444444);
-        String fmtDisplay = formatText;
-        if (focusedCardIndex == index && focusedFieldIndex == 0 && (System.currentTimeMillis() / 500) % 2 == 0) {
-            int cursor = cardFieldCursors.size() > index ? cardFieldCursors.get(index) : formatText.length();
-            fmtDisplay = formatText.substring(0, Math.min(cursor, formatText.length())) + "|" + formatText.substring(Math.min(cursor, formatText.length()));
-        }
-        dc.drawTextWithShadow(textRenderer, fmtDisplay, cx + 4, cy + 6, 0xFFE0E0E0);
-        cy += 20 + 4;
+        int cy = y + COLLAPSED_HEIGHT + CARD_PADDING;
 
-        dc.drawTextWithShadow(textRenderer, "Available Variables can be found in https://notnawfas.qzz.io/blog/ultimatepvputils", cx, cy, 0xFF888888);
-        cy += 18;
+        dc.drawTextWithShadow(textRenderer, "Name:", cx, cy, DrawUtils.TEXT_LABEL);
+        cy += LABEL_H;
+        int fieldW = Math.min(cw, MAX_FIELD_WIDTH);
+        boolean nameFocused = focusedCardIndex == index && focusedFieldIndex == 1;
+        int nameCursor = nameFieldCursors.size() > index ? nameFieldCursors.get(index) : entry.name.length();
+        drawTextField(dc, nameFieldTexts.size() > index ? nameFieldTexts.get(index) : entry.name, nameCursor, cx, cy, fieldW, nameFocused);
+        cy += FIELD_H + FIELD_GAP;
+
+        dc.drawTextWithShadow(textRenderer, "Display Format:", cx, cy, DrawUtils.TEXT_LABEL);
+        cy += LABEL_H;
+        boolean fmtFocused = focusedCardIndex == index && focusedFieldIndex == 0;
+        int fmtCursor = cardFieldCursors.size() > index ? cardFieldCursors.get(index) : entry.displayFormat.length();
+        drawTextField(dc, cardFieldTexts.size() > index ? cardFieldTexts.get(index) : entry.displayFormat, fmtCursor, cx, cy, fieldW, fmtFocused);
+        cy += FIELD_H + FIELD_GAP;
+
+        String docsText = "\u2139 Docs: notnawfas.qzz.io/blog/ultimatepvputils";
+        dc.drawTextWithShadow(textRenderer, docsText, cx, cy, DrawUtils.ACCENT);
+        int docsW = textRenderer.getWidth(docsText);
+        boolean docsHovered = mx >= cx && mx < cx + docsW && my >= cy && my < cy + DOCS_H;
+        dc.fill(cx, cy + 11, cx + docsW, cy + 12, docsHovered ? DrawUtils.ACCENT : DrawUtils.ACCENT_DIM);
+        cy += DOCS_H;
 
         drawToggleRow(dc, "Show Background", entry.showBackground, cx, cy, cw, mx, my);
         cy += WIDGET_HEIGHT + WIDGET_SPACING;
 
         int halfW = (cw - 8) / 2;
-        dc.drawTextWithShadow(textRenderer, "Background Color", cx, cy, 0xFFCCCCCC);
-        cy += 14;
+        dc.drawTextWithShadow(textRenderer, "Background Color", cx, cy, DrawUtils.TEXT_LABEL);
+        cy += LABEL_H;
         drawColorSwatch(dc, entry.backgroundColor, cx, cy, halfW, mx, my);
-        dc.drawTextWithShadow(textRenderer, "Text Color", cx + halfW + 8, cy - 14, 0xFFCCCCCC);
+        dc.drawTextWithShadow(textRenderer, "Text Color", cx + halfW + 8, cy - LABEL_H, DrawUtils.TEXT_LABEL);
         drawColorSwatch(dc, entry.textColor, cx + halfW + 8, cy, halfW, mx, my);
-        cy += WIDGET_HEIGHT + WIDGET_SPACING + 4;
+        cy += SWATCH_H + WIDGET_SPACING + FIELD_GAP;
 
-        dc.drawTextWithShadow(textRenderer, "Scale: " + String.format("%.1fx", entry.scale), cx, cy, 0xFFCCCCCC);
-        cy += 14;
+        dc.drawTextWithShadow(textRenderer, "Scale: " + String.format("%.1fx", entry.scale), cx, cy, DrawUtils.TEXT_LABEL);
+        cy += LABEL_H;
         drawSlider(dc, entry.scale, cx, cy, cw, mx, my);
-        cy += WIDGET_SPACING + 8;
+        cy += SLIDER_H + WIDGET_SPACING + FIELD_GAP;
 
-        // Position
-        dc.drawTextWithShadow(textRenderer, "Position", cx, cy, 0xFFCCCCCC);
-        cy += 14;
-        int presetW = 180, presetH = 22;
-        boolean presetHovered = mx >= cx && mx < cx + presetW && my >= cy && my < cy + presetH;
-        dc.fill(cx, cy, cx + presetW, cy + presetH, presetHovered ? 0xFF3A3A3A : 0xFF2A2A2A);
-        drawBorder(dc, cx, cy, presetW, presetH, 0xFF555555);
-        dc.drawCenteredTextWithShadow(textRenderer, "Preset: " + entry.presetName, cx + presetW / 2, cy + 7, 0xFF4FC3F7);
-        cy += presetH + WIDGET_SPACING;
+        int positionLabelW = textRenderer.getWidth("Position") + 8;
+        dc.drawTextWithShadow(textRenderer, "Position", cx, cy + 7, DrawUtils.TEXT_LABEL);
+        int presetBtnX = cx + positionLabelW;
+        int presetW = Math.min(180, cx + cw - presetBtnX);
+        if (presetW >= 60) {
+            boolean presetHovered = mx >= presetBtnX && mx < presetBtnX + presetW && my >= cy && my < cy + PRESET_H;
+            dc.fill(presetBtnX, cy, presetBtnX + presetW, cy + PRESET_H, presetHovered ? DrawUtils.BTN_HOVER : DrawUtils.BTN_BG);
+            DrawUtils.drawBorder(dc, presetBtnX, cy, presetW, PRESET_H, DrawUtils.BORDER_DIM);
+            dc.drawCenteredTextWithShadow(textRenderer, entry.presetName, presetBtnX + presetW / 2, cy + 7, DrawUtils.ACCENT);
+        } else {
+            dc.drawTextWithShadow(textRenderer, entry.presetName, cx, cy + 7, DrawUtils.ACCENT);
+        }
+        cy += PRESET_H + WIDGET_SPACING + FIELD_GAP;
 
         if (entry.isCustomPosition()) {
-            int editBtnH = 22;
-            boolean editHovered = mx >= cx && mx < cx + cw && my >= cy && my < cy + editBtnH;
-            dc.fill(cx, cy, cx + cw, cy + editBtnH, editHovered ? 0xFF3A3A3A : 0xFF2A2A2A);
-            drawBorder(dc, cx, cy, cw, editBtnH, 0xFF555555);
-            dc.drawCenteredTextWithShadow(textRenderer, "Edit Custom Position", cx + cw / 2, cy + 7, 0xFFE0E0E0);
+            boolean editHovered = mx >= cx && mx < cx + cw && my >= cy && my < cy + EDIT_BTN_H;
+            dc.fill(cx, cy, cx + cw, cy + EDIT_BTN_H, editHovered ? DrawUtils.BTN_HOVER : DrawUtils.BTN_BG);
+            DrawUtils.drawBorder(dc, cx, cy, cw, EDIT_BTN_H, DrawUtils.BORDER_DIM);
+            dc.drawCenteredTextWithShadow(textRenderer, "Edit Custom Position", cx + cw / 2, cy + 7, DrawUtils.TEXT_PRIMARY);
+            cy += EDIT_BTN_H + WIDGET_SPACING;
         }
+
+        boolean resetHovered = mx >= cx && mx < cx + cw && my >= cy && my < cy + RESET_BTN_H;
+        dc.fill(cx, cy, cx + cw, cy + RESET_BTN_H, resetHovered ? DrawUtils.RESET_HOVER : DrawUtils.RESET_BG);
+        DrawUtils.drawBorder(dc, cx, cy, cw, RESET_BTN_H, DrawUtils.RESET_BORDER);
+        dc.drawCenteredTextWithShadow(textRenderer, "Reset to Defaults", cx + cw / 2, cy + 6, DrawUtils.RESET_TEXT);
+
+        dc.disableScissor();
     }
 
+    // ========== Shared Widget Helpers ==========
+
     private void drawToggleRow(DrawContext dc, String label, boolean value, int x, int y, int w, int mx, int my) {
-        int toggleW = 40, toggleH = 20, toggleX = x + w - toggleW;
-        boolean hovered = mx >= toggleX && mx < toggleX + toggleW && my >= y && my < y + toggleH;
-        dc.drawTextWithShadow(textRenderer, label, x, y + 6, 0xFFCCCCCC);
-        dc.fill(toggleX, y + 2, toggleX + toggleW, y + toggleH - 2, value ? 0xFF4FC3F7 : 0xFF555555);
-        dc.fill(value ? toggleX + toggleW - 12 : toggleX + 2, y + 3, value ? toggleX + toggleW - 2 : toggleX + 12, y + toggleH - 3, 0xFFFFFFFF);
-        if (hovered) dc.fill(toggleX, y, toggleX + toggleW, y + toggleH, 0x10FFFFFF);
+        int toggleW = 40, toggleH = 16, toggleX = x + w - toggleW;
+        boolean hovered = mx >= toggleX && mx < toggleX + toggleW && my >= y + 2 && my < y + 2 + toggleH;
+        dc.drawTextWithShadow(textRenderer, label, x, y + 6, DrawUtils.TEXT_LABEL);
+        dc.fill(toggleX, y + 2, toggleX + toggleW, y + 2 + toggleH, value ? DrawUtils.ACCENT : DrawUtils.TOGGLE_OFF);
+        dc.fill(value ? toggleX + toggleW - 12 : toggleX + 2, y + 3, value ? toggleX + toggleW - 2 : toggleX + 12, y + 1 + toggleH, DrawUtils.KNOB);
+        if (hovered) dc.fill(toggleX, y + 2, toggleX + toggleW, y + 2 + toggleH, DrawUtils.HOVER_TINT_LIGHT);
     }
 
     private void drawColorSwatch(DrawContext dc, int color, int x, int y, int w, int mx, int my) {
         int h = 20;
         boolean hovered = mx >= x && mx < x + w && my >= y && my < y + h;
-        dc.fill(x, y, x + w, y + h, color | 0xFF000000);
-        drawBorder(dc, x, y, w, h, 0xFF000000);
-        if (hovered) dc.fill(x, y, x + w, y + h, 0x20FFFFFF);
+        DrawUtils.drawCheckerboard(dc, x + 1, y + 1, w - 2, h - 2);
+        dc.fill(x + 1, y + 1, x + w - 1, y + h - 1, color);
+        DrawUtils.drawBorder(dc, x, y, w, h, 0xFF000000);
+        if (hovered) dc.fill(x, y, x + w, y + h, DrawUtils.HOVER_TINT);
         int r = (color >> 16) & 0xFF, g = (color >> 8) & 0xFF, b = color & 0xFF;
-        String hex = String.format("#%02X%02X%02X", r, g, b);
-        dc.drawCenteredTextWithShadow(textRenderer, hex, x + w / 2, y + 6, (r * 0.299 + g * 0.587 + b * 0.114) > 128 ? 0xFF000000 : 0xFFFFFFFF);
+        int a = (color >> 24) & 0xFF;
+        String hex = String.format("#%02X%02X%02X%02X", a, r, g, b);
+        dc.drawCenteredTextWithShadow(textRenderer, hex, x + w / 2, y + 6, (r * 0.299 + g * 0.587 + b * 0.114) > 128 && a > 128 ? 0xFF000000 : 0xFFFFFFFF);
     }
 
     private void drawSlider(DrawContext dc, double value, int x, int y, int w, int mx, int my) {
-        dc.fill(x, y + 6, x + w, y + 14, 0xFF333333);
+        dc.fill(x, y + 6, x + w, y + 14, DrawUtils.BORDER_LIGHT);
         double ratio = (value - 0.5) / 1.5;
         int filledW = (int) (w * ratio);
-        dc.fill(x, y + 6, x + filledW, y + 14, 0xFF4FC3F7);
-        dc.fill(x + filledW - 4, y + 3, x + filledW + 4, y + 17, 0xFFFFFFFF);
+        dc.fill(x, y + 6, x + filledW, y + 14, DrawUtils.ACCENT);
+        int knobCenter = Math.max(0, Math.min(w - 8, filledW));
+        dc.fill(x + knobCenter - 4, y + 3, x + knobCenter + 4, y + 17, DrawUtils.KNOB);
     }
 
     private void drawAddButton(DrawContext dc, int x, int y, int w, int mx, int my) {
         int btnH = 22;
         boolean hovered = mx >= x && mx < x + w && my >= y && my < y + btnH;
-        dc.fill(x, y, x + w, y + btnH, hovered ? 0xFF2A4A2A : 0xFF1E3A1E);
-        drawBorder(dc, x, y, w, btnH, 0xFF4CAF50);
-        dc.drawCenteredTextWithShadow(textRenderer, "(+) Add New Counter", x + w / 2, y + 7, 0xFF4CAF50);
-    }
-
-    private void drawBorder(DrawContext dc, int x, int y, int w, int h, int color) {
-        dc.fill(x, y, x + w, y + 1, color);
-        dc.fill(x, y + h - 1, x + w, y + h, color);
-        dc.fill(x, y, x + 1, y + h, color);
-        dc.fill(x + w - 1, y, x + w, y + h, color);
+        dc.fill(x, y, x + w, y + btnH, hovered ? DrawUtils.ADD_HOVER : DrawUtils.ADD_BG);
+        DrawUtils.drawBorder(dc, x, y, w, btnH, DrawUtils.ADD_GREEN);
+        dc.drawCenteredTextWithShadow(textRenderer, "(+) Add New Counter", x + w / 2, y + 7, DrawUtils.ADD_GREEN);
     }
 
     // ========== Click Handling ==========
@@ -284,16 +441,39 @@ public class ModConfigScreen extends Screen {
         if (click.button() != 0) return super.mouseClicked(click, always);
         int mx = (int) click.x(), my = (int) click.y();
 
-        // Sidebar toggle
         ModConfig config = ModConfig.getConfig();
         int toggleX = 8, toggleY = 28, toggleW = SIDEBAR_WIDTH - 16, toggleH = 20;
         if (mx >= toggleX && mx < toggleX + toggleW && my >= toggleY && my < toggleY + toggleH) {
-            config.enabled = !config.enabled; config.save(); return true;
+            config.enabled = !config.enabled; config.requestSave(); return true;
+        }
+
+        int tabY = 24 + WIDGET_HEIGHT + 12 + 8;
+        String[] tabs = {"CPS Counter", "Visuals"};
+        int[] tabIds = {TAB_CPS, TAB_VISUALS};
+        for (int i = 0; i < tabs.length; i++) {
+            if (mx >= 0 && mx < SIDEBAR_WIDTH && my >= tabY && my < tabY + 28) {
+                if (activeTab != tabIds[i]) {
+                    activeTab = tabIds[i];
+                    scrollOffset = 0;
+                    expandedCardIndex = -1;
+                    focusedCardIndex = -1;
+                    focusedFieldIndex = -1;
+                    sliderDragging = false;
+                    pendingDeleteIndex = -1;
+                }
+                return true;
+            }
+            tabY += 28;
         }
 
         int contentX = SIDEBAR_WIDTH + PADDING;
         int contentWidth = width - SIDEBAR_WIDTH - PADDING * 2;
-        handleCpsTabClick(mx, my, contentX, contentWidth, config);
+
+        if (activeTab == TAB_CPS) {
+            handleCpsTabClick(mx, my, contentX, contentWidth, config);
+        } else {
+            handleVisualsTabClick(mx, my, contentX, contentWidth);
+        }
         return true;
     }
 
@@ -303,38 +483,41 @@ public class ModConfigScreen extends Screen {
 
         if (counters.isEmpty()) {
             if (mx >= x && mx < x + w && my >= cy + 40 && my < cy + 62) {
-                counters.add(new CounterEntry("Counter " + (counters.size() + 1), "%cps_mouse.left%", true, 0x80000000, 0xFFFFFFFF, 1.0, 0.0, 0.0, "Top-Left"));
-                syncFieldTexts(); config.save();
+                addCounter(config);
             }
             return;
         }
 
         for (int i = 0; i < counters.size(); i++) {
-            boolean expanded = (i == expandedCardIndex);
-            int cardH = expanded ? getExpandedCardHeight() : 28;
+            int cardH = getAnimatedCardHeight(i);
             if (my >= cy && my < cy + cardH && mx >= x && mx < x + w) {
-                if (my < cy + 28) {
-                    // Delete
-                    if (mx >= x + w - 18) {
-                        if (pendingDeleteIndex == i && System.currentTimeMillis() - pendingDeleteTime < 3000) {
+                if (my < cy + COLLAPSED_HEIGHT) {
+                    boolean deleteHit = mx >= x + w - 18 || (pendingDeleteIndex == i && pendingDeleteVersion == counters.size() && System.currentTimeMillis() - pendingDeleteTime < 3000 && mx >= x + 24);
+                    if (deleteHit) {
+                        if (pendingDeleteIndex == i && pendingDeleteVersion == counters.size() && System.currentTimeMillis() - pendingDeleteTime < 3000) {
                             counters.remove(i);
                             if (expandedCardIndex == i) expandedCardIndex = -1;
                             else if (expandedCardIndex > i) expandedCardIndex--;
+                            if (focusedCardIndex == i) { focusedCardIndex = -1; focusedFieldIndex = -1; }
+                            else if (focusedCardIndex > i) focusedCardIndex--;
+                            reindexAnimProgress(i);
                             pendingDeleteIndex = -1;
-                            syncFieldTexts(); config.save();
+                            syncFieldTexts(); config.requestSave();
                         } else {
                             pendingDeleteIndex = i;
                             pendingDeleteTime = System.currentTimeMillis();
+                            pendingDeleteVersion = counters.size();
                         }
                         return;
                     }
-                    // Reset pending delete if clicking elsewhere
                     pendingDeleteIndex = -1;
                     expandedCardIndex = (expandedCardIndex == i) ? -1 : i;
                     if (expandedCardIndex == i) syncFieldTexts();
                     return;
                 }
-                if (expanded) handleExpandedCardClick(mx, my, x, cy + 28, w, i, counters.get(i), config);
+                if (getCardProgress(i) > ANIM_THRESHOLD) {
+                    handleExpandedCardClick(mx, my, x, cy + COLLAPSED_HEIGHT, w, i, counters.get(i), config);
+                }
                 return;
             }
             cy += cardH + WIDGET_SPACING;
@@ -343,93 +526,203 @@ public class ModConfigScreen extends Screen {
         pendingDeleteIndex = -1;
         int addBtnY = cy + 4;
         if (mx >= x && mx < x + w && my >= addBtnY && my < addBtnY + 22) {
-            counters.add(new CounterEntry("Counter " + (counters.size() + 1), "%cps_mouse.left%", true, 0x80000000, 0xFFFFFFFF, 1.0, 0.0, 0.0, "Top-Left"));
-            syncFieldTexts(); config.save();
+            addCounter(config);
         }
     }
 
-    private void handleExpandedCardClick(int mx, int my, int cardX, int cardBodyY, int cardW, int index, CounterEntry entry, ModConfig config) {
-        int cx = cardX + CARD_PADDING;
-        int cw = cardW - CARD_PADDING * 2;
-        int cy = cardBodyY + CARD_PADDING;
-
-        // Name label
-        cy += 14;
-        // Name field
-        if (mx >= cx && mx < cx + cw && my >= cy && my < cy + 20) { focusedCardIndex = index; focusedFieldIndex = 1; return; }
-        cy += 20 + 4;
-
-        // Display Format label
-        cy += 14;
-        // Display Format field
-        if (mx >= cx && mx < cx + cw && my >= cy && my < cy + 20) { focusedCardIndex = index; focusedFieldIndex = 0; return; }
-        cy += 20 + 4;
-
-        // Variables hint
-        cy += 18;
-
-        // Show Background toggle
-        int toggleW = 40, toggleX = cx + cw - toggleW;
-        if (mx >= toggleX && mx < toggleX + toggleW && my >= cy && my < cy + WIDGET_HEIGHT) {
-            entry.showBackground = !entry.showBackground; config.save(); return;
-        }
-        cy += WIDGET_HEIGHT + WIDGET_SPACING;
-
-        // Background Color label
-        cy += 14;
-        int halfW = (cw - 8) / 2;
-        // Background Color swatch
-        if (mx >= cx && mx < cx + halfW && my >= cy && my < cy + 20) {
-            final int idx = index;
-            MinecraftClient.getInstance().setScreen(new ColorPickerScreen(this, "Background Color", entry.backgroundColor, c -> { ModConfig.getConfig().counters.get(idx).backgroundColor = c; ModConfig.getConfig().save(); }));
-            return;
-        }
-        // Text Color swatch
-        if (mx >= cx + halfW + 8 && mx < cx + cw && my >= cy && my < cy + 20) {
-            final int idx = index;
-            MinecraftClient.getInstance().setScreen(new ColorPickerScreen(this, "Text Color", entry.textColor, c -> { ModConfig.getConfig().counters.get(idx).textColor = c; ModConfig.getConfig().save(); }));
-            return;
-        }
-        cy += WIDGET_HEIGHT + WIDGET_SPACING + 4;
-
-        // Scale label
-        cy += 14;
-        // Scale slider
-        if (mx >= cx && mx < cx + cw && my >= cy && my < cy + 20) {
-            sliderDragging = true; sliderCardIndex = index;
-            double ratio = (double) (mx - cx) / cw;
-            double newVal = Math.round((0.5 + ratio * 1.5) / 0.1) * 0.1;
-            entry.scale = Math.max(0.5, Math.min(2.0, newVal)); config.save(); return;
-        }
-        cy += WIDGET_SPACING + 8;
-
-        // Position label
-        cy += 14;
-        // Position preset button
-        int presetW = 180, presetH = 22;
-        if (mx >= cx && mx < cx + presetW && my >= cy && my < cy + presetH) {
-            entry.presetName = getNextPreset(entry.presetName);
-            entry.applyPreset(entry.presetName);
-            config.save(); return;
-        }
-        cy += presetH + WIDGET_SPACING;
-
-        // Edit Custom Position button
-        if (entry.isCustomPosition()) {
-            int editBtnH = 22;
-            if (mx >= cx && mx < cx + cw && my >= cy && my < cy + editBtnH) {
-                MinecraftClient.getInstance().setScreen(new HudPositionScreen(this, entry));
+    private void handleVisualsTabClick(int mx, int my, int x, int w) {
+        int cy = 32 + scrollOffset;
+        if (my >= cy && my < cy + COLLAPSED_HEIGHT && mx >= x && mx < x + w) {
+            int btnW = 70, btnH = 18;
+            int btnX = x + w - CARD_PADDING - btnW;
+            int btnY = cy + (COLLAPSED_HEIGHT - btnH) / 2;
+            if (mx >= btnX && mx < btnX + btnW && my >= btnY && my < btnY + btnH) {
+                MinecraftClient.getInstance().setScreen(new ShieldCustomizeScreen(this));
                 return;
             }
         }
     }
 
-    private String getNextPreset(String current) {
-        for (int i = 0; i < PRESETS.length; i++) {
-            if (PRESETS[i].equals(current)) return PRESETS[(i + 1) % PRESETS.length];
-        }
-        return "Top-Left";
+    private void addCounter(ModConfig config) {
+        List<CounterEntry> counters = config.counters;
+        counters.add(new CounterEntry("Counter " + (counters.size() + 1), "%cps_mouse.left%", true, 0x80000000, 0xFFFFFFFF, 1.0, 0.0, 0.0, "Top-Left"));
+        pendingDeleteIndex = -1;
+        syncFieldTexts(); config.requestSave(); autoScrollToLastCounter();
     }
+
+    private void reindexAnimProgress(int removedIndex) {
+        cardAnimProgress.remove(removedIndex);
+        Map<Integer, Float> reindexed = new HashMap<>();
+        for (Map.Entry<Integer, Float> entry : cardAnimProgress.entrySet()) {
+            int key = entry.getKey();
+            if (key > removedIndex) key--;
+            reindexed.put(key, entry.getValue());
+        }
+        cardAnimProgress.clear();
+        cardAnimProgress.putAll(reindexed);
+    }
+
+    private void autoScrollToLastCounter() {
+        int totalH = getTotalContentHeight();
+        int viewH = height - 24;
+        int maxScroll = Math.max(0, totalH - viewH);
+        scrollOffset = -maxScroll;
+    }
+
+    private void handleExpandedCardClick(int mx, int my, int cardX, int cardBodyY, int cardW, int index, CounterEntry entry, ModConfig config) {
+        int cx = cardX + CARD_PADDING;
+        int cw = cardW - CARD_PADDING * 2;
+        int fieldW = Math.min(cw, MAX_FIELD_WIDTH);
+        int cy = cardBodyY + CARD_PADDING;
+
+        // Name field
+        cy += LABEL_H;
+        if (mx >= cx && mx < cx + fieldW && my >= cy && my < cy + FIELD_H) { focusedCardIndex = index; focusedFieldIndex = 1; setCursorFromClick(mx, cx, index, nameFieldTexts, nameFieldCursors); cursorBlinkStart = System.currentTimeMillis(); return; }
+        cy += FIELD_H + FIELD_GAP;
+
+        // Display Format field
+        cy += LABEL_H;
+        if (mx >= cx && mx < cx + fieldW && my >= cy && my < cy + FIELD_H) { focusedCardIndex = index; focusedFieldIndex = 0; setCursorFromClick(mx, cx, index, cardFieldTexts, cardFieldCursors); cursorBlinkStart = System.currentTimeMillis(); return; }
+        cy += FIELD_H + FIELD_GAP;
+
+        // Docs link
+        String docsText = "\u2139 Docs: notnawfas.qzz.io/blog/ultimatepvputils";
+        int docsW = textRenderer.getWidth(docsText);
+        if (mx >= cx && mx < cx + docsW && my >= cy && my < cy + DOCS_H) {
+            try {
+                long handle = MinecraftClient.getInstance().getWindow().getHandle();
+                org.lwjgl.glfw.GLFW.glfwSetClipboardString(handle, CpsVariable.DOCS_URL);
+            } catch (Exception ignored) {}
+            return;
+        }
+        cy += DOCS_H;
+
+        // Show Background toggle
+        int toggleW = 40, toggleX = cx + cw - toggleW;
+        if (mx >= toggleX && mx < toggleX + toggleW && my >= cy + 2 && my < cy + 18) { entry.showBackground = !entry.showBackground; config.requestSave(); return; }
+        cy += WIDGET_HEIGHT + WIDGET_SPACING;
+
+        // Color swatches
+        cy += LABEL_H;
+        int halfW = (cw - 8) / 2;
+        if (mx >= cx && mx < cx + halfW && my >= cy && my < cy + SWATCH_H) {
+            final int idx = index;
+            MinecraftClient.getInstance().setScreen(new ColorPickerScreen(this, "Background Color", entry.backgroundColor, c -> { ModConfig.getConfig().counters.get(idx).backgroundColor = c; ModConfig.getConfig().requestSave(); }));
+            return;
+        }
+        if (mx >= cx + halfW + 8 && mx < cx + cw && my >= cy && my < cy + SWATCH_H) {
+            final int idx = index;
+            MinecraftClient.getInstance().setScreen(new ColorPickerScreen(this, "Text Color", entry.textColor, c -> { ModConfig.getConfig().counters.get(idx).textColor = c; ModConfig.getConfig().requestSave(); }));
+            return;
+        }
+        cy += SWATCH_H + WIDGET_SPACING + FIELD_GAP;
+
+        // Scale slider
+        cy += LABEL_H;
+        if (mx >= cx && mx < cx + cw && my >= cy && my < cy + SLIDER_H) { sliderDragging = true; sliderCardIndex = index; sliderContentWidth = cw; double ratio = (double) (mx - cx) / cw; double newVal = Math.round((0.5 + ratio * 1.5) / 0.1) * 0.1; entry.scale = Math.max(0.5, Math.min(2.0, newVal)); config.requestSave(); return; }
+        cy += SLIDER_H + WIDGET_SPACING + FIELD_GAP;
+
+        // Position preset
+        cy += LABEL_H;
+        int positionLabelW = textRenderer.getWidth("Position") + 8;
+        int presetBtnX = cx + positionLabelW;
+        int clickPresetW = Math.min(180, cx + cw - presetBtnX);
+        if (clickPresetW >= 60 && mx >= presetBtnX && mx < presetBtnX + clickPresetW && my >= cy && my < cy + PRESET_H) { entry.presetName = entry.getNextPreset(); entry.applyPreset(entry.presetName); config.requestSave(); return; }
+        cy += PRESET_H + WIDGET_SPACING + FIELD_GAP;
+
+        // Edit Custom Position button (conditional)
+        if (entry.isCustomPosition()) {
+            if (mx >= cx && mx < cx + cw && my >= cy && my < cy + EDIT_BTN_H) { MinecraftClient.getInstance().setScreen(new HudPositionScreen(this, entry)); return; }
+            cy += EDIT_BTN_H + WIDGET_SPACING;
+        }
+
+        // Reset to Defaults button
+        if (mx >= cx && mx < cx + cw && my >= cy && my < cy + RESET_BTN_H) {
+            entry.name = "Counter";
+            entry.displayFormat = "[LMB: %cps_mouse.left% | RMB: %cps_mouse.right%]";
+            entry.showBackground = true;
+            entry.backgroundColor = 0x80000000;
+            entry.textColor = 0xFFFFFFFF;
+            entry.scale = 1.0;
+            entry.posX = 0.0;
+            entry.posY = 0.0;
+            entry.presetName = "Top-Left";
+            syncFieldTexts();
+            config.requestSave();
+            return;
+        }
+    }
+
+    // ========== Text Field Helpers ==========
+
+    private boolean editTextField(int key, List<String> texts, List<Integer> cursors, Consumer<String> setter) {
+        if (focusedCardIndex < 0 || focusedCardIndex >= texts.size() || focusedCardIndex >= cursors.size()) return false;
+        String text = texts.get(focusedCardIndex);
+        int cursor = cursors.get(focusedCardIndex);
+        if (key == GLFW.GLFW_KEY_BACKSPACE) {
+            if (cursor > 0 && !text.isEmpty()) { text = text.substring(0, cursor - 1) + text.substring(cursor); cursor--; texts.set(focusedCardIndex, text); cursors.set(focusedCardIndex, cursor); setter.accept(text); ModConfig.getConfig().requestSave(); cursorBlinkStart = System.currentTimeMillis(); }
+            return true;
+        } else if (key == GLFW.GLFW_KEY_LEFT) { if (cursor > 0) cursors.set(focusedCardIndex, cursor - 1); cursorBlinkStart = System.currentTimeMillis(); return true;
+        } else if (key == GLFW.GLFW_KEY_RIGHT) { if (cursor < text.length()) cursors.set(focusedCardIndex, cursor + 1); cursorBlinkStart = System.currentTimeMillis(); return true;
+        } else if (key == GLFW.GLFW_KEY_DELETE) { if (cursor < text.length()) { text = text.substring(0, cursor) + text.substring(cursor + 1); texts.set(focusedCardIndex, text); setter.accept(text); ModConfig.getConfig().requestSave(); cursorBlinkStart = System.currentTimeMillis(); } return true;
+        } else if (key == GLFW.GLFW_KEY_HOME) { cursors.set(focusedCardIndex, 0); cursorBlinkStart = System.currentTimeMillis(); return true;
+        } else if (key == GLFW.GLFW_KEY_END) { cursors.set(focusedCardIndex, text.length()); cursorBlinkStart = System.currentTimeMillis(); return true;
+        } else if (key == GLFW.GLFW_KEY_ENTER) { focusedCardIndex = -1; focusedFieldIndex = -1; return true; }
+        return false;
+    }
+
+    private boolean charTypedField(char c, List<String> texts, List<Integer> cursors, Consumer<String> setter) {
+        if (focusedCardIndex < 0 || focusedCardIndex >= texts.size() || focusedCardIndex >= cursors.size()) return false;
+        if (c >= 32 && c != 127) {
+            String text = texts.get(focusedCardIndex);
+            int cursor = cursors.get(focusedCardIndex);
+            text = text.substring(0, cursor) + c + text.substring(cursor);
+            cursor++;
+            texts.set(focusedCardIndex, text);
+            cursors.set(focusedCardIndex, cursor);
+            setter.accept(text);
+            ModConfig.getConfig().requestSave();
+            cursorBlinkStart = System.currentTimeMillis();
+            return true;
+        }
+        return false;
+    }
+
+    private void drawTextField(DrawContext dc, String text, int cursor, int x, int y, int w, boolean focused) {
+        dc.fill(x, y, x + w, y + 20, DrawUtils.FIELD_BG);
+        DrawUtils.drawBorder(dc, x, y, w, 20, focused ? DrawUtils.ACCENT : DrawUtils.BORDER);
+        int innerW = w - 8;
+        int textBeforeCursorW = cursor > 0 ? textRenderer.getWidth(text.substring(0, cursor)) : 0;
+        int scroll = 0;
+        if (textRenderer.getWidth(text) > innerW) {
+            if (textBeforeCursorW > scroll + innerW) { scroll = textBeforeCursorW - innerW; }
+            if (textBeforeCursorW < scroll) { scroll = Math.max(0, textBeforeCursorW - innerW / 2); }
+        }
+        boolean showCursor = focused && (System.currentTimeMillis() - cursorBlinkStart) % 1000 < 530;
+        dc.enableScissor(x + 4, y + 1, x + w - 4, y + 19);
+        if (showCursor) {
+            String beforeCursor = text.substring(0, Math.min(cursor, text.length()));
+            String afterCursor = text.substring(Math.min(cursor, text.length()));
+            dc.drawTextWithShadow(textRenderer, beforeCursor, x + 4 - scroll, y + 6, DrawUtils.TEXT_PRIMARY);
+            int cursorX = x + 4 - scroll + textRenderer.getWidth(beforeCursor);
+            dc.fill(cursorX, y + 5, cursorX + 1, y + 15, DrawUtils.CURSOR_COLOR);
+            dc.drawTextWithShadow(textRenderer, afterCursor, cursorX, y + 6, DrawUtils.TEXT_PRIMARY);
+        } else {
+            dc.drawTextWithShadow(textRenderer, text, x + 4 - scroll, y + 6, DrawUtils.TEXT_PRIMARY);
+        }
+        dc.disableScissor();
+    }
+
+    private void setCursorFromClick(int mx, int fieldX, int cardIndex, List<String> texts, List<Integer> cursors) {
+        String text = texts.size() > cardIndex ? texts.get(cardIndex) : "";
+        int innerX = mx - fieldX - 4;
+        if (innerX <= 0) { cursors.set(cardIndex, 0); return; }
+        int pos = 0;
+        while (pos < text.length()) { int charW = textRenderer.getWidth(text.substring(0, pos + 1)); if (charW > innerX) break; pos++; }
+        cursors.set(cardIndex, pos);
+    }
+
+    // ========== Input Handling ==========
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
@@ -440,8 +733,8 @@ public class ModConfigScreen extends Screen {
     @Override
     public boolean mouseDragged(Click click, double dragX, double dragY) {
         if (sliderDragging && sliderCardIndex >= 0 && sliderCardIndex < ModConfig.getConfig().counters.size()) {
+            int cw = sliderContentWidth;
             int cx = SIDEBAR_WIDTH + PADDING + CARD_PADDING;
-            int cw = width - SIDEBAR_WIDTH - PADDING * 2 - CARD_PADDING * 2;
             double ratio = Math.max(0, Math.min(1, (double) ((int) click.x() - cx) / cw));
             double newVal = Math.round((0.5 + ratio * 1.5) / 0.1) * 0.1;
             ModConfig.getConfig().counters.get(sliderCardIndex).scale = Math.max(0.5, Math.min(2.0, newVal));
@@ -452,65 +745,40 @@ public class ModConfigScreen extends Screen {
 
     @Override
     public boolean mouseReleased(Click click) {
-        if (sliderDragging) {
-            sliderDragging = false; sliderCardIndex = -1;
-            ModConfig.getConfig().save();
-        }
+        if (sliderDragging) { sliderDragging = false; sliderCardIndex = -1; ModConfig.getConfig().requestSave(); }
         return super.mouseReleased(click);
     }
 
     @Override
     public boolean keyPressed(net.minecraft.client.input.KeyInput keyInput) {
-        if (focusedCardIndex >= 0 && focusedCardIndex < ModConfig.getConfig().counters.size()) {
+        if (focusedCardIndex >= 0 && focusedCardIndex < ModConfig.getConfig().counters.size()
+         && focusedCardIndex < cardFieldTexts.size() && focusedCardIndex < nameFieldTexts.size()) {
             int key = keyInput.key();
-            if (focusedFieldIndex == 0) {
-                String text = cardFieldTexts.get(focusedCardIndex);
-                int cursor = cardFieldCursors.get(focusedCardIndex);
-                if (key == GLFW.GLFW_KEY_BACKSPACE) {
-                    if (cursor > 0 && !text.isEmpty()) { text = text.substring(0, cursor - 1) + text.substring(cursor); cursor--; cardFieldTexts.set(focusedCardIndex, text); cardFieldCursors.set(focusedCardIndex, cursor); ModConfig.getConfig().counters.get(focusedCardIndex).displayFormat = text; ModConfig.getConfig().save(); }
-                    return true;
-                } else if (key == GLFW.GLFW_KEY_LEFT) { if (cursor > 0) cardFieldCursors.set(focusedCardIndex, cursor - 1); return true;
-                } else if (key == GLFW.GLFW_KEY_RIGHT) { if (cursor < text.length()) cardFieldCursors.set(focusedCardIndex, cursor + 1); return true;
-                } else if (key == GLFW.GLFW_KEY_DELETE) { if (cursor < text.length()) { text = text.substring(0, cursor) + text.substring(cursor + 1); cardFieldTexts.set(focusedCardIndex, text); ModConfig.getConfig().counters.get(focusedCardIndex).displayFormat = text; ModConfig.getConfig().save(); } return true;
-                } else if (key == GLFW.GLFW_KEY_ENTER) { focusedCardIndex = -1; focusedFieldIndex = -1; return true; }
-            } else if (focusedFieldIndex == 1) {
-                String text = nameFieldTexts.get(focusedCardIndex);
-                int cursor = nameFieldCursors.get(focusedCardIndex);
-                if (key == GLFW.GLFW_KEY_BACKSPACE) {
-                    if (cursor > 0 && !text.isEmpty()) { text = text.substring(0, cursor - 1) + text.substring(cursor); cursor--; nameFieldTexts.set(focusedCardIndex, text); nameFieldCursors.set(focusedCardIndex, cursor); ModConfig.getConfig().counters.get(focusedCardIndex).name = text; ModConfig.getConfig().save(); }
-                    return true;
-                } else if (key == GLFW.GLFW_KEY_LEFT) { if (cursor > 0) nameFieldCursors.set(focusedCardIndex, cursor - 1); return true;
-                } else if (key == GLFW.GLFW_KEY_RIGHT) { if (cursor < text.length()) nameFieldCursors.set(focusedCardIndex, cursor + 1); return true;
-                } else if (key == GLFW.GLFW_KEY_DELETE) { if (cursor < text.length()) { text = text.substring(0, cursor) + text.substring(cursor + 1); nameFieldTexts.set(focusedCardIndex, text); ModConfig.getConfig().counters.get(focusedCardIndex).name = text; ModConfig.getConfig().save(); } return true;
-                } else if (key == GLFW.GLFW_KEY_ENTER) { focusedCardIndex = -1; focusedFieldIndex = -1; return true; }
-            }
+            if (focusedFieldIndex == 0) { if (editTextField(key, cardFieldTexts, cardFieldCursors, t -> ModConfig.getConfig().counters.get(focusedCardIndex).displayFormat = t)) return true; }
+            else if (focusedFieldIndex == 1) { if (editTextField(key, nameFieldTexts, nameFieldCursors, t -> ModConfig.getConfig().counters.get(focusedCardIndex).name = t)) return true; }
+        } else {
+            focusedCardIndex = -1;
+            focusedFieldIndex = -1;
         }
         return super.keyPressed(keyInput);
     }
 
     @Override
     public boolean charTyped(net.minecraft.client.input.CharInput charInput) {
-        if (focusedCardIndex >= 0 && focusedCardIndex < ModConfig.getConfig().counters.size()) {
+        if (focusedCardIndex >= 0 && focusedCardIndex < ModConfig.getConfig().counters.size()
+         && focusedCardIndex < cardFieldTexts.size() && focusedCardIndex < nameFieldTexts.size()) {
             char c = (char) charInput.codepoint();
-            if (c >= 32 && c != 127) {
-                if (focusedFieldIndex == 0) {
-                    String text = cardFieldTexts.get(focusedCardIndex); int cursor = cardFieldCursors.get(focusedCardIndex);
-                    text = text.substring(0, cursor) + c + text.substring(cursor); cursor++;
-                    cardFieldTexts.set(focusedCardIndex, text); cardFieldCursors.set(focusedCardIndex, cursor);
-                    ModConfig.getConfig().counters.get(focusedCardIndex).displayFormat = text; ModConfig.getConfig().save(); return true;
-                } else if (focusedFieldIndex == 1) {
-                    String text = nameFieldTexts.get(focusedCardIndex); int cursor = nameFieldCursors.get(focusedCardIndex);
-                    text = text.substring(0, cursor) + c + text.substring(cursor); cursor++;
-                    nameFieldTexts.set(focusedCardIndex, text); nameFieldCursors.set(focusedCardIndex, cursor);
-                    ModConfig.getConfig().counters.get(focusedCardIndex).name = text; ModConfig.getConfig().save(); return true;
-                }
-            }
+            if (focusedFieldIndex == 0) { if (charTypedField(c, cardFieldTexts, cardFieldCursors, t -> ModConfig.getConfig().counters.get(focusedCardIndex).displayFormat = t)) return true; }
+            else if (focusedFieldIndex == 1) { if (charTypedField(c, nameFieldTexts, nameFieldCursors, t -> ModConfig.getConfig().counters.get(focusedCardIndex).name = t)) return true; }
+        } else {
+            focusedCardIndex = -1;
+            focusedFieldIndex = -1;
         }
         return super.charTyped(charInput);
     }
 
     @Override
-    public void close() { ModConfig.getConfig().save(); if (client != null) client.setScreen(parent); }
+    public void close() { ModConfig.getConfig().flushIfDirty(); if (client != null) client.setScreen(parent); }
     @Override
     public boolean shouldPause() { return false; }
 }

@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class KeyboardHandlerMixin {
 
     @Inject(method = "onKey", at = @At("HEAD"))
-    private void onKey(long window, int key, KeyInput keyInput, CallbackInfo ci) {
-        CpsTracker.INSTANCE.onKeyPress(keyInput.key(), key);
+    private void onKey(long window, int action, KeyInput keyInput, CallbackInfo ci) {
+        CpsTracker.INSTANCE.onKeyPress(keyInput.key(), action);
     }
 }
