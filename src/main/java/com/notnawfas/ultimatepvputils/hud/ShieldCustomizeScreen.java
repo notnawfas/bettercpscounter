@@ -6,6 +6,8 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.item.Items;
+import net.minecraft.item.ItemStack;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
@@ -19,8 +21,10 @@ public class ShieldCustomizeScreen extends Screen {
     private static final int ROW_HEIGHT = 36;
     private static final int LABEL_H = 14;
     private static final int SECTION_GAP = 16;
+    private static final int PREVIEW_ITEM_SIZE = 16;
 
     private final Screen parent;
+    private final ItemStack shieldStack = new ItemStack(Items.SHIELD);
 
     private boolean sliderDragging = false;
     private int activeSlider = -1;
@@ -78,8 +82,30 @@ public class ShieldCustomizeScreen extends Screen {
         int previewW = panelX;
         int previewH = height;
 
-        dc.fill(0, previewH - 24, previewW, previewH, DrawUtils.OVERLAY_DARK);
-        dc.drawCenteredTextWithShadow(textRenderer, "Shield preview updates live \u2014 hold a shield!", previewW / 2, previewH - 18, DrawUtils.TEXT_DIM);
+        dc.drawCenteredTextWithShadow(textRenderer, "Shield Preview", previewW / 2, 12, DrawUtils.TEXT_DIM);
+
+        int baseSize = PREVIEW_ITEM_SIZE * 4;
+        float scale = (float) cfg().size;
+        int itemW = (int) (baseSize * scale);
+        int itemH = (int) (baseSize * scale);
+
+        int centerX = previewW / 2 + (int) (cfg().offsetX * 2);
+        int centerY = previewH / 2 - (int) (cfg().offsetY * 2);
+
+        if (!cfg().visible) {
+            dc.fill(centerX - itemW / 2 - 2, centerY - itemH / 2 - 2,
+                    centerX + itemW / 2 + 2, centerY + itemH / 2 + 2, 0x40FF4444);
+            dc.drawCenteredTextWithShadow(textRenderer, "Hidden", centerX, centerY - 4, 0xFFFF4444);
+        } else {
+            dc.getMatrices().pushMatrix();
+            try {
+                dc.getMatrices().translate(centerX - itemW / 2, centerY - itemH / 2);
+                dc.getMatrices().scale(scale * 4, scale * 4);
+                dc.drawItemWithoutEntity(shieldStack, 0, 0);
+            } finally {
+                dc.getMatrices().popMatrix();
+            }
+        }
     }
 
     private int drawSliderRow(DrawContext dc, String label, double value, double min, double max, String fmt, int id, int x, int y, int w, int mx, int my) {
