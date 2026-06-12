@@ -1,37 +1,37 @@
 {
   "schemaVersion": 1,
-  "id": "ultimatepvputils",
-  "version": "0.1.6",
-  "name": "Ultimate PvP Utils",
+  "id": "bettercpscounter",
+  "version": "0.0.1.7",
+  "name": "Better CPS Counter",
   "description": "PvP utility mod with customizable CPS counter and more.",
   "authors": [
     {
       "name": "notnawfas",
-      "contact": {"homepage": "https://notnawfas.qzz.io"}
+      "contact": {"homepage": "https://modrinth.com/project/better-cps-counter"}
     }
   ],
   "contact": {
-    "homepage": "https://modrinth.com/plugin/ultimatepvputils",
-    "sources": "https://github.com/notnawfas/ultimatepvputils",
-    "issues": "https://github.com/notnawfas/ultimatepvputils/issues",
-    "author": "https://notnawfas.qzz.io"
+    "homepage": "https://modrinth.com/project/better-cps-counter",
+    "sources": "https://github.com/notnawfas/bettercpscounter",
+    "issues": "https://github.com/notnawfas/bettercpscounter/issues",
+    "author": "https://modrinth.com/project/better-cps-counter"
   },
   "license": "All Rights Reserved",
-  "icon": "assets/ultimatepvputils/icon.png",
+  "icon": "assets/bettercpscounter/icon.png",
   "environment": "client",
   "entrypoints": {
     "main": [
-      "com.notnawfas.ultimatepvputils.UltimatePvPUtils"
+      "com.notnawfas.bettercpscounter.UltimatePvPUtils"
     ],
     "client": [
-      "com.notnawfas.ultimatepvputils.UltimatePvPUtilsClient"
+      "com.notnawfas.bettercpscounter.UltimatePvPUtilsClient"
     ],
     "modmenu": [
-      "com.notnawfas.ultimatepvputils.config.ModMenuIntegration"
+      "com.notnawfas.bettercpscounter.config.ModMenuIntegration"
     ]
   },
   "mixins": [
-    "ultimatepvputils.mixins.json"
+    "bettercpscounter.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=0.19.3",
