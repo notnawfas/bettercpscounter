@@ -1,0 +1,15 @@
+{
+  "bettercpscounter.name": "Better CPS Counter",
+  "bettercpscounter.config.title": "Better CPS Counter",
+  "bettercpscounter.config.category.cps": "CPS Counter",
+  "bettercpscounter.config.option.enabled": "Enabled",
+  "bettercpscounter.config.option.enabled.description": "Toggle the CPS HUD on/off",
+  "bettercpscounter.config.option.displayFormat": "Display Format",
+  "bettercpscounter.config.option.displayFormat.description": "Use %cps_mouse.left%, %cps_mouse.right%, %cps_keyboard.<key>% as variables",
+  "bettercpscounter.config.option.showBackground": "Show Background",
+  "bettercpscounter.config.option.backgroundColor": "Background Color",
+  "bettercpscounter.config.option.textColor": "Text Color",
+  "bettercpscounter.config.option.scale": "Scale",
+  "key.bettercpscounter.open_config": "Open Config",
+  "key.categories.bettercpscounter.keybindings": "Better CPS Counter"
+}

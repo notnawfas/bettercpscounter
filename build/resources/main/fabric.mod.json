@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "id": "bettercpscounter",
+  "version": "0.0.1.9",
+  "name": "Better CPS Counter",
+  "description": "PvP utility mod with customizable CPS counter and more.",
+  "authors": [
+    {
+      "name": "notnawfas",
+      "contact": {"homepage": "https://modrinth.com/project/better-cps-counter"}
+    }
+  ],
+  "contact": {
+    "homepage": "https://modrinth.com/project/better-cps-counter",
+    "sources": "https://github.com/notnawfas/bettercpscounter",
+    "issues": "https://github.com/notnawfas/bettercpscounter/issues",
+    "author": "https://modrinth.com/project/better-cps-counter"
+  },
+  "license": "All Rights Reserved",
+  "icon": "assets/bettercpscounter/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "main": [
+      "com.notnawfas.bettercpscounter.UltimatePvPUtils"
+    ],
+    "client": [
+      "com.notnawfas.bettercpscounter.UltimatePvPUtilsClient"
+    ],
+    "modmenu": [
+      "com.notnawfas.bettercpscounter.config.ModMenuIntegration"
+    ]
+  },
+  "mixins": [
+    "bettercpscounter.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "1.21.1",
+    "java": ">=21",
+    "fabric-api": ">=0.102.0"
+  },
+  "recommends": {
+    "modmenu": ">=11.0.0"
+  }
+}
