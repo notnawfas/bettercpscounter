@@ -1,4 +1,23 @@
-# 📊 Introduction
+<div align="center">
+<img src="https://i.imgur.com/xAoyBvA.png" alt="image could not be loaded">
+</div>
+<p align="right">by <strong>notnawfas</strong></p>
+<hr />
+<div align="center">
+<a href="https://discord.notnawfas.qzz.io" target="_blank">
+<img src="https://img.shields.io/badge/join-discord-blue?logo=discord&logoColor=white&style=for-the-badge" alt="err">
+</a>
+<a href="https://github.com/notnawfas/bettercpscounter" target="_blank">
+<img src="https://img.shields.io/badge/view-source-3d3d3d?logo=github&logoColor=white&style=for-the-badge" alt="err">
+</a>
+</div>
+<hr />
+
+<div align="center">
+<h1>
+✨ Introduction
+</h1>
+</div>
 
 **Better CPS Counter** is a lightweight, heavily customizable mod that allows you to add custom HUD elements to your screen to display your current CPS (Clicks Per Second). 
 
@@ -6,30 +25,36 @@ Whether you need to monitor your CPS for 1.8 PvP, practice advanced bridging tec
 
 Everything is fully hot-swappable and configurable in-game. You do not need to restart your client to apply changes or disable the mod—simply toggle the button in the configuration menu.
 
-<p align="left">
-  <img src="https://i.imgur.com/rQ8qvvt.png" alt="HUD Enabled Toggle Feature Screenshot">
+<p align="center">
+  <img src="https://i.imgur.com/rQ8qvvt.png" alt="image could not be loaded">
 </p>
 
 ---
 
-# ✨ Features
+<div align="center">
+<h1>
+✨ Features
+</h1>
+</div>
 
-* **Extremely Lightweight:** Designed to run with zero performance impact.
-* **Modern UI:** Clean, intuitive interface for stress-free customization.
-* **Built-in Presets:** Quick configurations to get you started immediately.
-* **Multiple HUDs:** Create and manage independent counters simultaneously.
-* **Draggable HUDs:** Drag and drop the HUDs anywhere you like.
-* **Zero Dependencies:** Completely self-sustained—just drop it into your mods folder and play.
-* **Heavily Customizable:** Tailor fonts, colors, formats, layouts, and positions exactly how you want them.
-* **Both Mouse+Keyboard:** Track both keyboard or mouse's input.
+**✓** **Extremely Lightweight:** Designed to run with zero performance impact. <br />
+**✓** **Modern UI:** Clean, intuitive interface for stress-free customization. <br />
+**✓** **Built-in Presets:** Quick configurations to get you started immediately. <br />
+**✓** **Multiple HUDs:** Create and manage independent counters simultaneously. <br />
+**✓** **Draggable HUDs:** Drag and drop the HUDs anywhere you like. <br />
+**✓** **Zero Dependencies:** Completely self-sustained—just drop it into your mods folder and play. <br />
+**✓** **Heavily Customizable:** Tailor fonts, colors, formats, layouts, and positions exactly how you want them. <br />
+**✓** **Both Mouse+Keyboard:** Track both keyboard or mouse's input. <br />
 
 ---
-
-# ⚙️ Variables
+<details>
+<summary><strong>All Available Variables</strong></summary>
 
 You can use the placeholders below inside your mod's **Display Format** text field to dynamically fetch specific click inputs.
 
-## 🖱️ Mouse Inputs
+<details>
+
+<summary>Mouse Inputs</summary>
 
 
 | Variable | Description |
@@ -38,11 +63,13 @@ You can use the placeholders below inside your mod's **Display Format** text fie
 | `%cps_mouse.right%` | Right Click (RMB) |
 | `%cps_mouse.middle%` | Middle Click (MMB) |
 
----
 
-## ⌨️ Keyboard Inputs
+</details>
+<details>
+<summary>Keyboard Inputs</summary>
 
-### Alphabet (A-Z)
+<details>
+<summary>Alphabet (A-Z)</summary>
 
 | Variable | Key | Variable | Key |
 | :--- | :--- | :--- | :--- |
@@ -60,7 +87,10 @@ You can use the placeholders below inside your mod's **Display Format** text fie
 | `%cps_keyboard.l%` | L | `%cps_keyboard.y%` | Y |
 | `%cps_keyboard.m%` | M | `%cps_keyboard.z%` | Z |
 
-### Numbers (0-9)
+</details>
+<details>
+ 
+<summary>Numbers (0-9)</summary>
 
 | Variable | Key | Variable | Key |
 | :--- | :--- | :--- | :--- |
@@ -70,7 +100,10 @@ You can use the placeholders below inside your mod's **Display Format** text fie
 | `%cps_keyboard.3%` | 3 | `%cps_keyboard.8%` | 8 |
 | `%cps_keyboard.4%` | 4 | `%cps_keyboard.9%` | 9 |
 
-### Function Keys (F1 - F25)
+</details>
+<details>
+<summary>Function Keys (F1 - F25)</summary>
+  
 *Note: Standard hardware layouts generally access keys F13–F25 when pressing `SHIFT` alongside the regular `F1`–`F12` row keys.*
 
 
@@ -89,8 +122,9 @@ You can use the placeholders below inside your mod's **Display Format** text fie
 | `%cps_keyboard.f11%` | F11 | `%cps_keyboard.f24%` | F24 |
 | `%cps_keyboard.f12%` | F12 | `%cps_keyboard.f25%` | F25 |
 | `%cps_keyboard.f13%` | F13 | | |
-
-### Numpad Layout
+</details>
+<details>
+<summary>Numpad Layout</summary>
 
 | Variable | Key | Variable | Key |
 | :--- | :--- | :--- | :--- |
@@ -104,7 +138,9 @@ You can use the placeholders below inside your mod's **Display Format** text fie
 | `%cps_keyboard.numpad7%` | Numpad 7 | `%cps_keyboard.numpad_equal%` | Numpad Equal (=) |
 | `%cps_keyboard.numpad8%` | Numpad 8 | | |
 
-### System & Navigation Keys
+</details>
+<details>
+<summary>System & Navigation Keys</summary>
 
 | Variable | Key |
 | :--- | :--- |
@@ -122,7 +158,9 @@ You can use the placeholders below inside your mod's **Display Format** text fie
 | `%cps_lock%` | Scroll Lock |
 | `%cps_keyboard.pause%` | Pause |
 
-### Modifiers & Control Keys
+</details>
+<details>
+<summary>Modifiers & Control Keys</summary>
 
 | Variable | Key |
 | :--- | :--- |
@@ -146,7 +184,9 @@ You can use the placeholders below inside your mod's **Display Format** text fie
 | `%cps_keyboard.tab%` | Tab |
 | `%cps_keyboard.backspace%` | Backspace |
 
-### Symbols & Miscellaneous
+</details>
+<details>
+<summary>Symbols & Miscellaneous</summary>
 
 | Variable | Key |
 | :--- | :--- |
@@ -165,15 +205,23 @@ You can use the placeholders below inside your mod's **Display Format** text fie
 | `%cps_keyboard.world1%` | World 1 |
 | `%cps_keyboard.world2%` | World 2 |
 | `%cps_keyboard.menu%` | Menu Key |
+</details>
+</details>
+</details>
 
-# Author
-made by **NotNawfas**
-* Portfolio: [https://notnawfas.qzz.io](https://notnawfas.qzz.io/)
-* Discord: [https://discord.notnawfas.qzz.io](https://notnawfas.qzz.io)
-* GitHub Repo: [https://github.com/notnawfas/bettercpscounter](https://github.com/notnawfas/bettercpscounter)
+<div align="center">
+<h1>
+✨ Author
+</h1>
 
+<a href="https://notnawfas.qzz.io/" target="_blank">
+<img src="https://img.shields.io/badge/made_by-notnawfas-red?style=for-the-badge" alt="err">
+</a>
+<a href="https://notnawfas.qzz.io/" target="_blank">
+<img src="https://img.shields.io/badge/visit-portfolio-blue?style=for-the-badge" alt="err">
+</a>
+
+<br />
+<br />
 Thank you for reading all the way down to here! That's pretty much it.
-
-# For Developers
-
-You can look through the code to understand the structure and reliablity to include the mod **as a dependency** in your code. Currently I didn't explicitly added anything for developers so You have to do it alone!
+</div>
