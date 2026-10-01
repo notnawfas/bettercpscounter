@@ -1,0 +1,21 @@
+# Gradle
+.gradle/
+build/
+run/
+
+# IDE
+.zed/
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# OS
+.DS_Store
+Thumbs.db
+
+# JDK
+jdk25/
+
+# myfiles
+workspace/
